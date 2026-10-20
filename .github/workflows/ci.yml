@@ -1,0 +1,43 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: reservo_test }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/reservo_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+
+  image:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # Deploy step: see docs/DEPLOY.md (Cloud Run or ECS). Run
+      # `node scripts/migrate.ts` as a one-off job before shifting traffic.

@@ -1,0 +1,46 @@
+# Local development: Postgres + app + worker.
+#   docker compose up --build
+#   docker compose run --rm app node scripts/seed-demo.ts localhost
+#   open http://mare.localhost:8080  (dashboard: /admin)
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: reservo
+      POSTGRES_DB: reservo
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      retries: 20
+
+  migrate:
+    build: .
+    command: ["node", "scripts/migrate.ts"]
+    environment: &env
+      NODE_ENV: development
+      DATABASE_URL: postgres://postgres:reservo@db:5432/reservo
+      PUBLIC_BASE_URL: http://localhost:8080
+      PLATFORM_DOMAIN: localhost
+      PORT: "8080"
+      INLINE_WORKER: "false"
+    depends_on:
+      db: { condition: service_healthy }
+
+  app:
+    build: .
+    environment: *env
+    ports: ["8080:8080"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker:
+    build: .
+    command: ["node", "src/worker.ts"]
+    environment: *env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  pgdata:

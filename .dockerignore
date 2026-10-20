@@ -1,0 +1,9 @@
+node_modules
+.git
+.github
+test
+deploy
+docs
+*.md
+.env*
+demo-export
