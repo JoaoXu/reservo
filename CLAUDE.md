@@ -29,6 +29,11 @@ npm test                    # unit + integration (needs Postgres, uses reservo_t
 npm run typecheck
 ```
 
+Local Postgres: `docker compose up -d db` (password `reservo`, so `.env` has
+`DATABASE_URL=postgres://postgres:reservo@127.0.0.1:5432/reservo`). `npm test`
+doesn't load `.env`: pass
+`DATABASE_URL=postgres://postgres:reservo@127.0.0.1:5432/reservo_test`.
+
 Postgres 14+ with `btree_gist` (bundled with Postgres). Node 22.18+ runs the
 TypeScript directly: there is no build step.
 
@@ -59,7 +64,7 @@ Map: `src/domain/` (bookings, availability, payments/ifthenpay, notify, jobs),
 `src/web/` (site, booking flow, hooks, admin), `src/http/` (router, sessions,
 rate limits), `docs/` (ARCHITECTURE, DEPLOY, ONBOARDING).
 
-## Current status (20 Oct 2026)
+## Current status (23 Oct 2026)
 
 Done and tested locally: template, booking engine (DB exclusion constraint
 prevents double bookings), ifthenpay MB WAY/Multibanco/card client and
@@ -67,47 +72,54 @@ webhooks, mock gateway for demos, owner dashboard, reminders job, RGPD
 export/erasure, Dockerfile, docker-compose, CI workflow, GCP Terraform
 (`deploy/gcp/`), static demo export (`npm run demo:export`).
 
+**Deployed on AWS** (20 Oct 2026): `deploy/aws/`, demo studio live at
+http://reservo-750414086.eu-west-1.elb.amazonaws.com (image `d2e0252`).
+
 Not yet done / not verified:
 - **Never run against the real ifthenpay API.** Needs the founder's own
   ifthenpay contract and keys (MB WAY, MB KEY, CCARD KEY, anti-phishing key).
   Multibanco sandbox endpoint (`IFTHENPAY_MB_SANDBOX=true`) is assumed to be
   `/multibanco/reference/sandbox`; confirm with ifthenpay support.
-- **Not deployed anywhere.** AWS chosen as the target (see below).
-- `package-lock.json` doesn't exist yet: commit it after the first `npm install`.
+- **No domain / HTTPS yet.** On the ALB hostname the demo's simulated card
+  payment and "manage booking" links point at `https://mare.<PLATFORM_DOMAIN>`
+  and don't resolve; MB WAY / Multibanco demo flows work.
+- **Deploys are manual** (`make release`); `ci.yml` still pushes to GHCR only.
 - WhatsApp (Meta Cloud API) and Brevo are written but untested; they default
   to `log` (print only).
 
-## Next task: deploy to AWS
+## AWS deployment (how it is set up)
 
-Decision: AWS (portfolio value for the founder's DevOps job search). Region
-`eu-south-2` (Spain) unless the founder says otherwise. Budget target about
-€50–60/month at launch.
+Decisions made by the founder: AWS for portfolio value; region `eu-west-1`;
+no NAT gateway (tasks in public subnets with a public IP, SG accepts only the
+ALB); plain HTTP on the ALB until a domain is bought; alarms to the founder's
+email via SNS. Budget about €50–60/month; estimate ~$56.
 
-Build `deploy/aws/` in Terraform, mirroring `deploy/gcp/main.tf`:
-- VPC with 2 AZs; public subnets for the ALB, private subnets for app and DB.
-  To save cost, avoid NAT Gateways: give tasks public IPs in public subnets
-  with tight security groups, or use VPC endpoints; explain the trade-off and
-  let the founder pick.
-- ECR repository; ECS Fargate service (0.25 vCPU / 512 MB, min 1 task) behind
-  an ALB, health check `/healthz`, `TRUST_PROXY_HOPS=1`.
-- RDS PostgreSQL 16 `db.t4g.micro`, encrypted, private, 7-day backups,
-  deletion protection on, security group allowing 5432 only from the service.
-- Secrets Manager for `DATABASE_URL`, `DATA_ENCRYPTION_KEY`, `CRON_SECRET`,
-  injected as ECS task secrets.
-- One-off ECS task definition for migrations (`node scripts/migrate.ts`).
-- EventBridge Scheduler every minute → `POST /internal/cron` with the bearer
-  token (or a second small ECS service running `node src/worker.ts`; cheaper
-  to use the scheduler). Set `INLINE_WORKER=false`.
-- ACM certificate + HTTPS listener once a domain exists; until then HTTP on
-  the ALB DNS name is fine for testing, with `PUBLIC_BASE_URL` set to it.
-- CloudWatch log group (30-day retention) and an alarm on 5xx / unhealthy
-  targets, notifying the founder's email via SNS.
-- Remote state in S3 with locking.
-- A `Makefile` or `deploy/aws/README.md` with: build + push image, run
-  migrations task, update service, seed demo.
+- ECS Fargate ARM64 (0.25 vCPU / 512 MB, 1 task) behind an ALB, health check
+  `/healthz`, circuit breaker with rollback. ECR tags are immutable git SHAs;
+  build with `--provenance=false` (ECR rejects the attestation index).
+- RDS Postgres 16 `db.t4g.micro`, private subnets, encrypted, 7-day backups,
+  deletion protection + `prevent_destroy`, `sslmode=require`.
+- Secrets Manager: `reservo/DATABASE_URL`, `reservo/DATA_ENCRYPTION_KEY`,
+  `reservo/CRON_SECRET`.
+- Background jobs run in the web task (`INLINE_WORKER=true`) because
+  EventBridge API destinations need HTTPS. `https.tf` switches on the ACM
+  certificate, :443, the :80 redirect and the EventBridge cron via
+  `domain_name` then `https_enabled`.
+- State: S3 bucket `reservo-tfstate-847047140632` (created by
+  `deploy/aws/bootstrap/`), native lockfile.
+- Credentials: Terraform 1.10's S3 backend can't read `aws login` sessions;
+  use a `credential_process` profile (see `deploy/aws/README.md`). Call AWS
+  CLI v2 as `/opt/homebrew/bin/aws`: a pyenv CLI v1 shim shadows it.
+- Operating it: `deploy/aws/README.md` and the `Makefile` (`release`, `migrate`,
+  `seed`, `smoke`).
 
-Then: deploy, run migrations, `seed-demo.ts` with the ALB hostname as an
-extra domain, and smoke-test `/healthz`, `/`, `/marcar`, `/admin`.
+## Next candidates
+
+- Pick the name, buy the domain, turn on HTTPS (`https.tf`), re-run the seed.
+- GitHub Actions deploy to AWS with OIDC (no stored keys): push to ECR, run
+  the migrate task, update the service on merges to `main`.
+- Before the first paying studio: ifthenpay sandbox test, an RDS restore
+  test, decide on Multi-AZ (~€14/month).
 
 ## Safety rules for infrastructure work
 
