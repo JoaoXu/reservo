@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (git-ignored). image_tag comes from the Makefile.
+alarm_email = "you@example.com"
+
+# Later, when the domain exists (see https.tf):
+# domain_name   = "example.pt"
+# https_enabled = true
