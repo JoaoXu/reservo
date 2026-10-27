@@ -91,11 +91,11 @@ ACM validation CNAMEs, point `app.` and `*.` at the ALB, then set
 task (`INLINE_WORKER=true`) to an EventBridge rule calling `/internal/cron`
 every minute (API destinations require HTTPS). Re-run `make seed` afterwards.
 
-## Known limits of the HTTP-only setup
+## Known limits
 
-- The demo's simulated card payment and the "manage booking" links build
-  absolute `https://mare.<PLATFORM_DOMAIN>` URLs, which don't resolve on the
-  ALB hostname. MB WAY and Multibanco demo flows work. Fixed by the domain.
+- Without HTTPS (no `domain_name`), the demo's simulated card payment and the
+  "manage booking" links build absolute `https://mare.<PLATFORM_DOMAIN>` URLs,
+  which don't resolve on the ALB hostname.
 - DB TLS uses `sslmode=require` (encrypted, CA not verified). To verify, ship
   the RDS CA bundle in the image and use `sslmode=verify-full`.
 

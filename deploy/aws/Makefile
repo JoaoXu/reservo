@@ -53,11 +53,11 @@ release: push migrate-def migrate
 # Recreates the demo studio "Maré" (wipes its bookings). Add
 # SEED_ARGS=--with-bookings for sample bookings.
 seed:
-	./run-task.sh node scripts/seed-demo.ts $(call out,alb_dns_name) $(SEED_ARGS)
+	./run-task.sh node scripts/seed-demo.ts $(call out,seed_extra_domains) $(SEED_ARGS)
 
 smoke:
-	@base=$(call out,url); fail=0; \
-	for p in /healthz / /marcar /admin/login; do \
-	  code=$$(curl -s -o /dev/null -w '%{http_code}' "$$base$$p"); echo "$$code $$base$$p"; \
+	@fail=0; \
+	for u in $(call out,url)/healthz $(call out,demo_url)/ $(call out,demo_url)/marcar $(call out,demo_url)/admin/login; do \
+	  code=$$(curl -s -o /dev/null -w '%{http_code}' "$$u"); echo "$$code $$u"; \
 	  [ "$$code" = 200 ] || fail=1; \
 	done; exit $$fail

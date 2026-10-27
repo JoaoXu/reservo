@@ -13,8 +13,9 @@ resource "aws_db_parameter_group" "pg16" {
   name   = "${var.name}-pg16"
   family = "postgres16"
   parameter {
-    name  = "rds.force_ssl"
-    value = "1"
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot" # static parameter; AWS reports it this way
   }
   parameter {
     name  = "log_min_duration_statement"

@@ -1,5 +1,14 @@
 output "region" { value = var.region }
 output "url" { value = local.public_base_url }
+output "demo_url" { value = local.demo_url }
+output "name_servers" {
+  description = "Set these at the registrar when route53_zone is used"
+  value       = local.route53 ? aws_route53_zone.main[0].name_servers : []
+}
+output "seed_extra_domains" {
+  description = "Extra demo domain: the ALB hostname while there is no HTTPS"
+  value       = local.https ? "" : aws_lb.main.dns_name
+}
 output "alb_dns_name" { value = aws_lb.main.dns_name }
 output "ecr_repository_url" { value = aws_ecr_repository.app.repository_url }
 output "cluster" { value = aws_ecs_cluster.main.name }

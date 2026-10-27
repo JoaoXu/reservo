@@ -72,17 +72,17 @@ webhooks, mock gateway for demos, owner dashboard, reminders job, RGPD
 export/erasure, Dockerfile, docker-compose, CI workflow, GCP Terraform
 (`deploy/gcp/`), static demo export (`npm run demo:export`).
 
-**Deployed on AWS** (20 Oct 2026): `deploy/aws/`, demo studio live at
-http://reservo-750414086.eu-west-1.elb.amazonaws.com (image `d2e0252`).
+**Deployed on AWS** (20 Oct 2026): `deploy/aws/`, image `d2e0252`. HTTPS on
+the test domain since 27 Oct: demo studio https://mare.reservo.joaoxu.dev,
+platform host https://app.reservo.joaoxu.dev. `joaoxu.dev` is the founder's
+personal domain (registrar Namecheap, DNS in Route 53), used only for testing
+until the product name and domain are decided.
 
 Not yet done / not verified:
 - **Never run against the real ifthenpay API.** Needs the founder's own
   ifthenpay contract and keys (MB WAY, MB KEY, CCARD KEY, anti-phishing key).
   Multibanco sandbox endpoint (`IFTHENPAY_MB_SANDBOX=true`) is assumed to be
   `/multibanco/reference/sandbox`; confirm with ifthenpay support.
-- **No domain / HTTPS yet.** On the ALB hostname the demo's simulated card
-  payment and "manage booking" links point at `https://mare.<PLATFORM_DOMAIN>`
-  and don't resolve; MB WAY / Multibanco demo flows work.
 - **Deploys are manual** (`make release`); `ci.yml` still pushes to GHCR only.
 - WhatsApp (Meta Cloud API) and Brevo are written but untested; they default
   to `log` (print only).
@@ -91,8 +91,8 @@ Not yet done / not verified:
 
 Decisions made by the founder: AWS for portfolio value; region `eu-west-1`;
 no NAT gateway (tasks in public subnets with a public IP, SG accepts only the
-ALB); plain HTTP on the ALB until a domain is bought; alarms to the founder's
-email via SNS. Budget about €50–60/month; estimate ~$56.
+ALB); alarms to the founder's email via SNS. Budget about €50–60/month;
+estimate ~$56 plus $0.50 for the Route 53 zone.
 
 - ECS Fargate ARM64 (0.25 vCPU / 512 MB, 1 task) behind an ALB, health check
   `/healthz`, circuit breaker with rollback. ECR tags are immutable git SHAs;
@@ -101,10 +101,12 @@ email via SNS. Budget about €50–60/month; estimate ~$56.
   deletion protection + `prevent_destroy`, `sslmode=require`.
 - Secrets Manager: `reservo/DATABASE_URL`, `reservo/DATA_ENCRYPTION_KEY`,
   `reservo/CRON_SECRET`.
-- Background jobs run in the web task (`INLINE_WORKER=true`) because
-  EventBridge API destinations need HTTPS. `https.tf` switches on the ACM
-  certificate, :443, the :80 redirect and the EventBridge cron via
-  `domain_name` then `https_enabled`.
+- HTTPS (`https.tf`): ACM wildcard certificate, :443 listener, :80 redirects.
+  Route 53 zone `joaoxu.dev` (`route53_zone`) holds the validation CNAME and
+  `*.reservo.joaoxu.dev` -> ALB. Switching to the real domain later: change
+  `domain_name` / `route53_zone`, apply, delegate, then `https_enabled`.
+- Background jobs: EventBridge rule every minute -> API destination
+  `POST https://app.reservo.joaoxu.dev/internal/cron` (`INLINE_WORKER=false`).
 - State: S3 bucket `reservo-tfstate-847047140632` (created by
   `deploy/aws/bootstrap/`), native lockfile.
 - Credentials: Terraform 1.10's S3 backend can't read `aws login` sessions;
@@ -115,7 +117,7 @@ email via SNS. Budget about €50–60/month; estimate ~$56.
 
 ## Next candidates
 
-- Pick the name, buy the domain, turn on HTTPS (`https.tf`), re-run the seed.
+- Pick the name and buy the real domain; move off the joaoxu.dev test domain.
 - GitHub Actions deploy to AWS with OIDC (no stored keys): push to ECR, run
   the migrate task, update the service on merges to `main`.
 - Before the first paying studio: ifthenpay sandbox test, an RDS restore

@@ -2,13 +2,17 @@
 # Two steps once the domain is bought:
 #
 #   1. Set domain_name = "example.pt" and apply. This requests an ACM
-#      certificate for example.pt + *.example.pt; add the CNAMEs from the
-#      `acm_validation_records` output at your DNS provider.
-#   2. Point app.example.pt and *.example.pt (CNAME/ALIAS) at the ALB, set
-#      https_enabled = true and apply. That adds the :443 listener, turns :80
-#      into a redirect, sets PUBLIC_BASE_URL=https://app.example.pt and
-#      PLATFORM_DOMAIN=example.pt, and moves background jobs from the web task
-#      to an EventBridge rule calling POST /internal/cron every minute.
+#      certificate for example.pt + *.example.pt.
+#      - With route53_zone set (e.g. "example.pt"), Terraform creates the
+#        hosted zone, the validation CNAMEs and *.example.pt -> ALB. Point the
+#        registrar at the `name_servers` output.
+#      - Without it, add the CNAMEs from `acm_validation_records` at your DNS
+#        provider and point app.example.pt and *.example.pt at the ALB.
+#   2. Once the certificate is issued, set https_enabled = true and apply.
+#      That adds the :443 listener, turns :80 into a redirect, sets
+#      PUBLIC_BASE_URL=https://app.example.pt and PLATFORM_DOMAIN=example.pt,
+#      and moves background jobs from the web task to an EventBridge rule
+#      calling POST /internal/cron every minute.
 #
 # Then re-run the demo seed so mare.example.pt becomes the studio's domain.
 # Studio custom domains: add each certificate with aws_lb_listener_certificate.
@@ -18,6 +22,11 @@ variable "domain_name" {
   default     = ""
   description = "Platform domain (studios get <slug>.<domain>). Empty = HTTP only on the ALB DNS name"
 }
+variable "route53_zone" {
+  type        = string
+  default     = ""
+  description = "Route 53 hosted zone to create for DNS (domain_name or a parent of it). Empty = DNS managed elsewhere"
+}
 variable "https_enabled" {
   type        = bool
   default     = false
@@ -26,8 +35,10 @@ variable "https_enabled" {
 
 locals {
   https           = var.domain_name != "" && var.https_enabled
+  route53         = var.domain_name != "" && var.route53_zone != ""
   platform_domain = local.https ? var.domain_name : aws_lb.main.dns_name
   public_base_url = local.https ? "https://app.${var.domain_name}" : "http://${aws_lb.main.dns_name}"
+  demo_url        = local.https ? "https://mare.${var.domain_name}" : local.public_base_url
 }
 
 resource "aws_acm_certificate" "main" {
@@ -40,8 +51,47 @@ resource "aws_acm_certificate" "main" {
 
 # Waits until ACM sees the validation records.
 resource "aws_acm_certificate_validation" "main" {
-  count           = local.https ? 1 : 0
-  certificate_arn = aws_acm_certificate.main[0].arn
+  count                   = local.https ? 1 : 0
+  certificate_arn         = aws_acm_certificate.main[0].arn
+  validation_record_fqdns = local.route53 ? aws_route53_record.acm[*].fqdn : null
+}
+
+# --- DNS in Route 53 (optional) ----------------------------------------------------------
+# Recreating the zone changes its name servers and breaks the delegation at
+# the registrar, hence prevent_destroy. ~$0.50/month.
+resource "aws_route53_zone" "main" {
+  count = local.route53 ? 1 : 0
+  name  = var.route53_zone
+  lifecycle { prevent_destroy = true }
+}
+
+# ACM gives the apex and the wildcard the same validation CNAME, so one record
+# covers both. (count, not for_each: the options are unknown until the
+# certificate exists.)
+locals {
+  acm_validation = local.route53 ? one([for o in aws_acm_certificate.main[0].domain_validation_options : o if o.domain_name == var.domain_name]) : null
+}
+
+resource "aws_route53_record" "acm" {
+  count   = local.route53 ? 1 : 0
+  zone_id = aws_route53_zone.main[0].zone_id
+  name    = local.acm_validation.resource_record_name
+  type    = local.acm_validation.resource_record_type
+  records = [local.acm_validation.resource_record_value]
+  ttl     = 300
+}
+
+# app.<domain> (platform) and <slug>.<domain> (studios) -> ALB.
+resource "aws_route53_record" "wildcard" {
+  count   = local.route53 ? 1 : 0
+  zone_id = aws_route53_zone.main[0].zone_id
+  name    = "*.${var.domain_name}"
+  type    = "A"
+  alias {
+    name                   = aws_lb.main.dns_name
+    zone_id                = aws_lb.main.zone_id
+    evaluate_target_health = false
+  }
 }
 
 resource "aws_vpc_security_group_ingress_rule" "alb_https" {
