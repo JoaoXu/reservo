@@ -1,4 +1,5 @@
-// Onboards a new studio from the command line.
+// Onboards a new studio from the command line. For a full setup (texts,
+// services, team, hours) prefer a client file: npm run tenant:apply.
 //   npm run tenant:create -- --slug casa-lotus --name "Casa Lótus" \
 //     --owner-email ana@casalotus.pt --owner-name "Ana Lima" [--domain casalotus.pt] [--trial-days 30]
 // Prints a one-time password for the owner; they should change it on first login.
@@ -7,6 +8,7 @@ import { sql, closeDb } from '../src/db.ts';
 import { hashPassword, randomToken } from '../src/lib/crypto.ts';
 import { isMain } from '../src/lib/main.ts';
 import { config } from '../src/config.ts';
+import { defaultSite, publishFields } from '../src/domain/sites.ts';
 
 if (isMain(import.meta.url)) {
   const { values } = parseArgs({
@@ -33,6 +35,7 @@ if (isMain(import.meta.url)) {
         await tx`insert into tenant_domains (domain, tenant_id, is_primary) values (${d}, ${t.id}, ${i === domains.length - 1})`;
       }
       await tx`insert into users (tenant_id, email, name, password_hash, role) values (${t.id}, ${email}, ${values['owner-name'] ?? name}, ${await hashPassword(password)}, 'owner')`;
+      await publishFields(tx, t.id, { name, content: { email }, theme: {}, site: defaultSite() }, 'tenant:create', 'Initial version');
     });
     console.log(`Created ${name}: https://${slug}.${config.platformDomain}/admin`);
     console.log(`Owner login: ${email}`);

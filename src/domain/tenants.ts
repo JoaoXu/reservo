@@ -24,15 +24,29 @@ export interface TenantTheme {
   hero_image_url?: string;
 }
 
+export const BUSINESS_TYPES = ['massage', 'salon', 'barber', 'beauty'] as const;
+export type BusinessType = (typeof BUSINESS_TYPES)[number];
+
+export const SECTION_TYPES = ['hero', 'services', 'about', 'team', 'visit'] as const;
+export type SectionType = (typeof SECTION_TYPES)[number];
+
+/** Layout of the public site: template and the order/visibility of its sections. */
+export interface SiteConfig {
+  template: 'classic';
+  sections: { type: SectionType; enabled: boolean }[];
+}
+
 export interface Tenant {
   id: string;
   slug: string;
   name: string;
   status: 'demo' | 'trial' | 'active' | 'suspended';
+  business_type: BusinessType;
   timezone: string;
   default_locale: 'pt' | 'en';
   content: TenantContent;
   theme: TenantTheme;
+  site: Partial<SiteConfig>;
   slot_interval_min: number;
   min_lead_min: number;
   max_advance_days: number;

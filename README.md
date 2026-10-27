@@ -7,7 +7,8 @@ online booking, MB WAY / Multibanco / card deposits through the studio's own
 ifthenpay account, confirmation and reminder messages, and an owner dashboard
 that works on a phone.
 
-The demo studio, **Maré** (Lisbon), is seeded with `npm run seed:demo`.
+The demo studio, **Maré** (Lisbon), is fictional: it is the template for new
+businesses (`clients/mare.json`) and is seeded with `npm run seed:demo`.
 
 ## What's included
 
@@ -55,14 +56,17 @@ online booking flow, ifthenpay callbacks (anti-phishing key, amount check,
 duplicate deliveries), signed MB WAY notifications, expired holds and late
 payments, customer cancellation, CSRF and studio isolation in the dashboard.
 
-## Adding a studio
+## Adding a business
+
+Each business is a client file: texts, look, services, team and hours.
 
 ```bash
-npm run tenant:create -- --slug casa-lotus --name "Casa Lótus" \
-  --owner-email ana@casalotus.pt --owner-name "Ana Lima" --domain casalotus.pt
+cp clients/mare.json clients/casa-lotus.json   # edit it
+npm run tenant:apply -- clients/casa-lotus.json --dry-run
+npm run tenant:apply -- clients/casa-lotus.json
 ```
 
-Then follow [docs/ONBOARDING.md](docs/ONBOARDING.md): domain, ifthenpay keys and callback, treatments, team and hours.
+Then follow [docs/ONBOARDING.md](docs/ONBOARDING.md): file format, ifthenpay keys and callback, domain.
 
 ## Project layout
 
@@ -77,7 +81,9 @@ src/
   lib/                 time zones, HTML escaping, crypto, validation, i18n
 public/                CSS, browser JS, self-hosted fonts
 migrations/            SQL schema
-scripts/               migrate, seed demo, create studio, export static demo
+clients/               one JSON file per business (mare.json is the fictional demo)
+scripts/               migrate, seed demo, apply client file, export static demo
+deploy/aws/            Terraform: ECS Fargate + ALB + RDS + Route 53 (live)
 deploy/gcp/            Terraform: Cloud Run + Cloud SQL + Secret Manager + Scheduler
 docs/                  architecture, deployment, onboarding
 ```

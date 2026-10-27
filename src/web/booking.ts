@@ -2,7 +2,7 @@
 // the customer's "manage booking" page.
 import { sql } from '../db.ts';
 import { html, jsonForScript } from '../lib/html.ts';
-import { t, loc, type Locale, type MsgKey } from '../lib/i18n.ts';
+import { t, tb, loc, type Locale, type MsgKey } from '../lib/i18n.ts';
 import { formatDateLong, formatMoney, formatTime, isDateStr, localDateStr, addDays } from '../lib/time.ts';
 import { FieldErrors, bool, email as emailField, isUuid, oneOf, phone as phoneField, str } from '../lib/validate.ts';
 import { HttpError, checkSameOrigin, htmlReply, jsonReply, readBody, redirect, type Ctx, type Reply } from '../http/core.ts';
@@ -47,17 +47,17 @@ export async function bookingPage(ctx: Ctx): Promise<Reply> {
       date: isDateStr(ctx.query.get('data')) ? ctx.query.get('data') : null,
       time: ctx.query.get('hora') && !Number.isNaN(Date.parse(ctx.query.get('hora')!)) ? ctx.query.get('hora') : null,
     },
-    text: Object.fromEntries((Object.keys(BOOKING_STRINGS) as MsgKey[]).map((k) => [k, t(l, k, { hours: tenant.cancel_window_hours })])),
+    text: Object.fromEntries((Object.keys(BOOKING_STRINGS) as MsgKey[]).map((k) => [k, tb(l, tenant.business_type, k, { hours: tenant.cancel_window_hours })])),
   };
 
   const body = html`
 <section class="book" aria-labelledby="book-title">
-  <h1 id="book-title" class="book-title">${t(l, 'book.title')}</h1>
+  <h1 id="book-title" class="book-title">${tb(l, tenant.business_type, 'book.title')}</h1>
   <noscript><p class="notice">${l === 'en' ? 'Online booking needs JavaScript. You can also book by phone or WhatsApp.' : 'A marcação online precisa de JavaScript. Também pode marcar por telefone ou WhatsApp.'} ${tenant.content.phone ?? ''}</p></noscript>
   <div id="booking-app" class="book-app" aria-live="polite"></div>
   <script type="application/json" id="booking-data">${jsonForScript(data)}</script>
 </section>`;
-  return htmlReply(sitePage(ctx, { title: `${t(l, 'book.title')} | ${tenant.name}`, body, bodyClass: 'booking', scripts: ['/static/js/booking.js'], noindex: false }));
+  return htmlReply(sitePage(ctx, { title: `${tb(l, tenant.business_type, 'book.title')} | ${tenant.name}`, body, bodyClass: 'booking', scripts: ['/static/js/booking.js'], noindex: false }));
 }
 
 // Strings the browser script needs.

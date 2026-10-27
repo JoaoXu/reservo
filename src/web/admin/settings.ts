@@ -1,77 +1,43 @@
-// Studio settings: site content, look, booking rules, payments, alerts.
+// Studio settings: business type, booking rules, payments, alerts.
+// Site texts and look are versioned and live in ./site.ts.
 import { sql } from '../../db.ts';
 import { config } from '../../config.ts';
 import { html, type SafeHtml } from '../../lib/html.ts';
-import { FieldErrors, email as emailField, hexColor, httpUrl, int, oneOf, phone as phoneField, str, bool } from '../../lib/validate.ts';
+import { FieldErrors, email as emailField, int, oneOf, phone as phoneField, str, bool } from '../../lib/validate.ts';
 import { HttpError, htmlReply, readBody, redirect, type Ctx, type Reply } from '../../http/core.ts';
-import { invalidateTenantCache, paymentKeys, sealPaymentKeys, type TenantContent, type TenantTheme } from '../../domain/tenants.ts';
+import { BUSINESS_TYPES, invalidateTenantCache, paymentKeys, sealPaymentKeys, type BusinessType } from '../../domain/tenants.ts';
 import { adminPage, csrfField, fieldError, flashFrom, tr } from './layout.ts';
 
-const SECTIONS = ['studio', 'look', 'booking', 'payments', 'alerts'] as const;
+const SECTIONS = ['booking', 'payments', 'alerts'] as const;
 type Section = (typeof SECTIONS)[number];
 
 function sectionNav(ctx: Ctx, current: Section): SafeHtml {
   const l = ctx.locale;
   const names: Record<Section, [string, string]> = {
-    studio: ['Estúdio e textos', 'Studio and texts'], look: ['Aspeto', 'Look'], booking: ['Regras de marcação', 'Booking rules'],
+    booking: ['Negócio e marcações', 'Business and bookings'],
     payments: ['Pagamentos', 'Payments'], alerts: ['Avisos', 'Alerts'],
   };
   return html`<nav class="tabs" aria-label="${tr(l, 'Secções', 'Sections')}">${SECTIONS.map((s) => html`<a href="/admin/settings?s=${s}" ${s === current ? html`aria-current="page"` : ''}>${tr(l, names[s][0], names[s][1])}</a>`)}</nav>`;
 }
 
+const BUSINESS_NAMES: Record<BusinessType, [string, string]> = {
+  massage: ['Massagem e bem-estar', 'Massage and wellness'], salon: ['Cabeleireiro', 'Hair salon'],
+  barber: ['Barbearia', 'Barbershop'], beauty: ['Estética e unhas', 'Beauty and nails'],
+};
+
 export async function settingsPage(ctx: Ctx, errors: Record<string, string> = {}): Promise<Reply> {
   const t = ctx.tenant!;
   const l = ctx.locale;
-  const section = (SECTIONS as readonly string[]).includes(ctx.query.get('s') ?? '') ? (ctx.query.get('s') as Section) : 'studio';
-  const c = t.content;
-  const th = t.theme;
+  // Texts and look moved to the Website page; keep old links working.
+  const asked = ctx.query.get('s');
+  if (asked === 'studio' || asked === 'look') return redirect(`/admin/site?s=${asked === 'studio' ? 'texts' : 'look'}`);
+  const section = (SECTIONS as readonly string[]).includes(asked ?? '') ? (asked as Section) : 'booking';
   let form: SafeHtml;
 
-  if (section === 'studio') {
+  if (section === 'booking') {
     form = html`
-    <label>${tr(l, 'Nome do estúdio', 'Studio name')}<input name="name" value="${t.name}" required maxlength="80">${fieldError(errors, 'name', l)}</label>
-    <div class="row">
-      <label>${tr(l, 'Frase principal (português)', 'Headline (Portuguese)')}<input name="tagline_pt" value="${c.tagline_pt ?? ''}" maxlength="90"></label>
-      <label>${tr(l, 'Frase principal (inglês)', 'Headline (English)')}<input name="tagline_en" value="${c.tagline_en ?? ''}" maxlength="90"></label>
-    </div>
-    <label>${tr(l, 'Introdução (português)', 'Intro (Portuguese)')}<textarea name="intro_pt" rows="2" maxlength="300">${c.intro_pt ?? ''}</textarea></label>
-    <label>${tr(l, 'Introdução (inglês)', 'Intro (English)')}<textarea name="intro_en" rows="2" maxlength="300">${c.intro_en ?? ''}</textarea></label>
-    <label>${tr(l, 'Sobre nós (português)', 'About us (Portuguese)')}<textarea name="about_pt" rows="4" maxlength="2000">${c.about_pt ?? ''}</textarea></label>
-    <label>${tr(l, 'Sobre nós (inglês)', 'About us (English)')}<textarea name="about_en" rows="4" maxlength="2000">${c.about_en ?? ''}</textarea></label>
-    <div class="row">
-      <label>${tr(l, 'Morada', 'Address')}<input name="address" value="${c.address ?? ''}" maxlength="120"></label>
-      <label>${tr(l, 'Código postal', 'Postcode')}<input name="postal_code" value="${c.postal_code ?? ''}" maxlength="12"></label>
-      <label>${tr(l, 'Localidade', 'Town')}<input name="city" value="${c.city ?? ''}" maxlength="60"></label>
-    </div>
-    <label>${tr(l, 'Link do Google Maps', 'Google Maps link')}<input name="map_url" type="url" value="${c.map_url ?? ''}">${fieldError(errors, 'map_url', l)}</label>
-    <div class="row">
-      <label>${tr(l, 'Telefone', 'Phone')}<input name="phone" value="${c.phone ?? ''}" maxlength="30"></label>
-      <label>WhatsApp<input name="whatsapp" value="${c.whatsapp ?? ''}" maxlength="30">${fieldError(errors, 'whatsapp', l)}</label>
-      <label>Email<input name="email" type="email" value="${c.email ?? ''}">${fieldError(errors, 'email', l)}</label>
-      <label>Instagram<input name="instagram" value="${c.instagram ?? ''}" maxlength="40" placeholder="@"></label>
-    </div>
-    <div class="row">
-      <label>${tr(l, 'Nota sobre horário (português)', 'Hours note (Portuguese)')}<input name="hours_note_pt" value="${c.hours_note_pt ?? ''}" maxlength="120"></label>
-      <label>${tr(l, 'Nota sobre horário (inglês)', 'Hours note (English)')}<input name="hours_note_en" value="${c.hours_note_en ?? ''}" maxlength="120"></label>
-    </div>
-    <div class="row">
-      <label>${tr(l, 'Nome legal (para o rodapé e privacidade)', 'Legal name (footer and privacy)')}<input name="legal_name" value="${c.legal_name ?? ''}" maxlength="120"></label>
-      <label>NIF<input name="nif" value="${c.nif ?? ''}" maxlength="12" inputmode="numeric"></label>
-    </div>
-    <label>${tr(l, 'Política de cancelamento (português, opcional)', 'Cancellation policy (Portuguese, optional)')}<textarea name="policy_pt" rows="3" maxlength="2000">${c.policy_pt ?? ''}</textarea></label>
-    <label>${tr(l, 'Política de cancelamento (inglês, opcional)', 'Cancellation policy (English, optional)')}<textarea name="policy_en" rows="3" maxlength="2000">${c.policy_en ?? ''}</textarea></label>`;
-  } else if (section === 'look') {
-    form = html`
-    <p class="muted">${tr(l, 'As cores aplicam-se ao site e ao painel. Garanta bom contraste entre texto e fundo.', 'Colours apply to the site and dashboard. Keep good contrast between text and background.')}</p>
-    <div class="row">
-      <label>${tr(l, 'Texto e botões', 'Text and buttons')}<input type="color" name="ink" value="${th.ink ?? '#1d3a35'}"></label>
-      <label>${tr(l, 'Fundo', 'Background')}<input type="color" name="paper" value="${th.paper ?? '#eef2ee'}"></label>
-      <label>${tr(l, 'Destaque', 'Highlight')}<input type="color" name="accent" value="${th.accent ?? '#7a4e63'}"></label>
-      <label>${tr(l, 'Superfícies', 'Surfaces')}<input type="color" name="soft" value="${th.soft ?? '#dfe7e1'}"></label>
-    </div>${fieldError(errors, 'colors', l)}
-    <label>${tr(l, 'Logótipo (link https, opcional)', 'Logo (https link, optional)')}<input name="logo_url" type="url" value="${th.logo_url ?? ''}">${fieldError(errors, 'logo_url', l)}</label>`;
-  } else if (section === 'booking') {
-    form = html`
+    <label>${tr(l, 'Tipo de negócio', 'Type of business')}<select name="business_type">${BUSINESS_TYPES.map((b) => html`<option value="${b}" ${t.business_type === b ? 'selected' : ''}>${tr(l, BUSINESS_NAMES[b][0], BUSINESS_NAMES[b][1])}</option>`)}</select>
+      <small>${tr(l, 'Define as palavras usadas no site e na marcação (por exemplo “Terapeuta” ou “Barbeiro”).', 'Sets the words used on the site and in booking (for example “Therapist” or “Barber”).')}</small></label>
     <div class="row">
       <label>${tr(l, 'Intervalo entre horários (min)', 'Time between start options (min)')}<select name="slot_interval_min">${[10, 15, 20, 30, 60].map((n) => html`<option value="${n}" ${t.slot_interval_min === n ? 'selected' : ''}>${n}</option>`)}</select></label>
       <label>${tr(l, 'Antecedência mínima (horas)', 'Minimum notice (hours)')}<input type="number" name="min_lead_hours" min="0" max="72" value="${Math.round(t.min_lead_min / 60)}"></label>
@@ -129,7 +95,7 @@ export async function settingsPage(ctx: Ctx, errors: Record<string, string> = {}
     ${form}
     <button class="btn" type="submit">${tr(l, 'Guardar', 'Save')}</button>
   </form>
-  ${section === 'studio' ? html`<p class="muted"><a href="/admin/customers">${tr(l, 'Clientes e dados pessoais', 'Customers and personal data')}</a> · <a href="/admin/account">${tr(l, 'A sua conta', 'Your account')}</a></p>` : ''}`;
+  ${section === 'booking' ? html`<p class="muted"><a href="/admin/site">${tr(l, 'Textos e aspeto do site', 'Website texts and look')}</a> · <a href="/admin/customers">${tr(l, 'Clientes e dados pessoais', 'Customers and personal data')}</a> · <a href="/admin/account">${tr(l, 'A sua conta', 'Your account')}</a></p>` : ''}`;
   return htmlReply(adminPage(ctx, { title: tr(l, 'Definições', 'Settings'), body, flash: flashFrom(ctx) }), Object.keys(errors).length ? 422 : 200);
 }
 
@@ -140,30 +106,9 @@ export async function settingsSave(ctx: Ctx): Promise<Reply> {
   const body = await readBody(ctx);
   const errs = new FieldErrors();
 
-  if (section === 'studio') {
-    const name = str(body, 'name', errs, { max: 80 });
-    const content: TenantContent = { ...t.content };
-    for (const [k, max] of [['tagline_pt', 90], ['tagline_en', 90], ['intro_pt', 300], ['intro_en', 300], ['about_pt', 2000], ['about_en', 2000],
-      ['address', 120], ['postal_code', 12], ['city', 60], ['phone', 30], ['instagram', 40], ['hours_note_pt', 120], ['hours_note_en', 120],
-      ['legal_name', 120], ['nif', 12], ['policy_pt', 2000], ['policy_en', 2000]] as const) {
-      (content as Record<string, string>)[k] = str(body, k, errs, { max, required: false });
-    }
-    content.map_url = httpUrl(body, 'map_url', errs) ?? '';
-    content.email = emailField(body, 'email', errs, false) ?? '';
-    content.whatsapp = str(body, 'whatsapp', errs, { max: 30, required: false }) ? phoneField(body, 'whatsapp', errs, false) : '';
-    if (!errs.ok) return settingsPage(ctx, errs.errors);
-    await sql`update tenants set name = ${name}, content = ${sql.json(content as never)}, updated_at = now() where id = ${t.id}`;
-  } else if (section === 'look') {
-    const theme: TenantTheme = {
-      ...t.theme,
-      ink: hexColor(body, 'ink', errs, '#1d3a35'), paper: hexColor(body, 'paper', errs, '#eef2ee'),
-      accent: hexColor(body, 'accent', errs, '#7a4e63'), soft: hexColor(body, 'soft', errs, '#dfe7e1'),
-      logo_url: httpUrl(body, 'logo_url', errs) ?? '',
-    };
-    if (!errs.ok) return settingsPage(ctx, errs.errors);
-    await sql`update tenants set theme = ${sql.json(theme as never)}, updated_at = now() where id = ${t.id}`;
-  } else if (section === 'booking') {
+  if (section === 'booking') {
     const v = {
+      business_type: oneOf(body, 'business_type', BUSINESS_TYPES, errs, t.business_type),
       slot_interval_min: int(body, 'slot_interval_min', errs, { min: 5, max: 120 }),
       min_lead_min: int(body, 'min_lead_hours', errs, { min: 0, max: 72 }) * 60,
       max_advance_days: int(body, 'max_advance_days', errs, { min: 1, max: 365 }),

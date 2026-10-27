@@ -1,5 +1,5 @@
 import { html, type SafeHtml } from '../../lib/html.ts';
-import type { Locale } from '../../lib/i18n.ts';
+import { tb, type Locale } from '../../lib/i18n.ts';
 import type { Ctx } from '../../http/core.ts';
 import { ASSET_VERSION, themeStyle } from '../layout.ts';
 
@@ -18,6 +18,7 @@ const NAV: { href: string; pt: string; en: string; icon: string }[] = [
   { href: '/admin/bookings/new', pt: 'Nova', en: 'New', icon: 'M12 5v14M5 12h14' },
   { href: '/admin/services', pt: 'Tratamentos', en: 'Treatments', icon: 'M6 4h12v16H6zM9 8h6M9 12h6' },
   { href: '/admin/team', pt: 'Equipa', en: 'Team', icon: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M18 15c2 .5 3 2.5 3 5' },
+  { href: '/admin/site', pt: 'Site', en: 'Website', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18' },
   { href: '/admin/settings', pt: 'Definições', en: 'Settings', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4' },
 ];
 
@@ -54,7 +55,7 @@ ${s ? html`<nav class="adm-nav" aria-label="${tr(l, 'Painel', 'Dashboard')}">
   <a class="adm-brand" href="/admin">${tenant.name}</a>
   <ul>
     ${NAV.map((n) => html`<li><a href="${n.href}" ${isActive(ctx, n.href) ? html`aria-current="page"` : ''}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${n.icon}"/></svg><span>${tr(l, n.pt, n.en)}</span></a></li>`)}
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${n.icon}"/></svg><span>${n.href === '/admin/services' ? tb(l, tenant.business_type, 'nav.services') : tr(l, n.pt, n.en)}</span></a></li>`)}
   </ul>
   <div class="adm-user">
     <a href="/" target="_blank" rel="noopener">${tr(l, 'Ver site', 'View site')}</a>
@@ -84,7 +85,17 @@ const FLASH: Record<string, [string, string, 'ok' | 'error']> = {
   password: ['Palavra-passe alterada.', 'Password changed.', 'ok'],
   anonymized: ['Dados do cliente apagados.', 'Customer data erased.', 'ok'],
   sent: ['Mensagem enviada.', 'Message sent.', 'ok'],
+  draft: ['Guardado no rascunho. Pré-visualize e publique quando estiver pronto.', 'Saved to the draft. Preview it and publish when ready.', 'ok'],
+  published: ['Publicado. O site já mostra as alterações.', 'Published. The site now shows your changes.', 'ok'],
+  nodraft: ['Não há rascunho para publicar.', 'There is no draft to publish.', 'error'],
+  discarded: ['Rascunho descartado.', 'Draft discarded.', 'ok'],
+  restored: ['Versão reposta e publicada.', 'Version restored and published.', 'ok'],
 };
+
+/** The business type's word for a staff member ("Terapeuta", "Barbeiro"...). */
+export function staffWord(ctx: Ctx): string {
+  return tb(ctx.locale, ctx.tenant!.business_type, 'book.step_staff');
+}
 
 export function flashFrom(ctx: Ctx): AdminPageOpts['flash'] {
   const code = ctx.query.get('ok');

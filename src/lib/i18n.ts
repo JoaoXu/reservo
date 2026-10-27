@@ -65,7 +65,7 @@ const pt = {
   'book.pay_card': 'Cartão',
   'book.pay_card_hint': 'Visa ou Mastercard.',
   'book.pay_studio': 'Pagar no dia',
-  'book.pay_studio_hint': 'Paga no estúdio, no fim do tratamento.',
+  'book.pay_studio_hint': 'Paga no dia, no fim da visita.',
   'book.mbway_phone': 'Número MB WAY',
   'book.policy_short': 'Pode cancelar sem custos até {hours} h antes.',
   'book.err.slot_unavailable': 'Esse horário acabou de ficar ocupado. Escolha outro.',
@@ -112,7 +112,7 @@ const pt = {
   'booking.add_calendar': 'Adicionar ao calendário',
   'booking.cancel': 'Cancelar marcação',
   'booking.cancel_confirm': 'Tem a certeza? O horário fica livre para outra pessoa.',
-  'booking.cancel_too_late': 'Para cancelar a menos de {hours} h, contacte o estúdio.',
+  'booking.cancel_too_late': 'Para cancelar a menos de {hours} h, contacte-nos.',
   'booking.cancelled_ok': 'A marcação foi cancelada.',
   'booking.contact': 'Dúvidas? Fale connosco',
   'booking.not_found': 'Não encontrámos esta marcação. Confirme o link da mensagem.',
@@ -132,6 +132,31 @@ const pt = {
   'msg.owner_cancel_body': '{name} cancelou {service} de {when}.\n{admin}',
   'msg.owner_late_subject': 'Atenção: pagamento recebido depois do prazo',
   'msg.owner_late_body': '{name} pagou {amount} pela marcação {ref} ({when}) depois de o horário ter sido libertado e ocupado. Contacte o cliente para remarcar ou devolver.\n{admin}',
+
+  // Business type. "key@type" overrides "key" for that type (see tb()); the
+  // plain key is the massage wording.
+  'biz.category': 'Massagem',
+  'biz.category@salon': 'Cabeleireiro',
+  'biz.category@barber': 'Barbearia',
+  'biz.category@beauty': 'Estética',
+  'biz.whatsapp_text': 'Olá! Gostaria de marcar um tratamento.',
+  'biz.whatsapp_text@salon': 'Olá! Gostaria de marcar um horário.',
+  'biz.whatsapp_text@barber': 'Olá! Gostaria de marcar um horário.',
+  'nav.services@salon': 'Serviços',
+  'nav.services@barber': 'Serviços',
+  'services.title@salon': 'Serviços',
+  'services.title@barber': 'Serviços',
+  'hero.book_cta@salon': 'Marcar horário',
+  'hero.book_cta@barber': 'Marcar horário',
+  'book.title@salon': 'Marcar horário',
+  'book.title@barber': 'Marcar horário',
+  'book.step_service@salon': 'Serviço',
+  'book.step_service@barber': 'Serviço',
+  'book.step_staff@salon': 'Profissional',
+  'book.step_staff@barber': 'Barbeiro',
+  'book.step_staff@beauty': 'Esteticista',
+  'site.preview_banner': 'Pré-visualização: alterações ainda não publicadas.',
+  'site.preview_back': 'Voltar ao painel',
 } as const;
 
 export type MsgKey = keyof typeof pt;
@@ -198,7 +223,7 @@ const en: Record<MsgKey, string> = {
   'book.pay_card': 'Card',
   'book.pay_card_hint': 'Visa or Mastercard.',
   'book.pay_studio': 'Pay on the day',
-  'book.pay_studio_hint': 'Pay at the studio after your treatment.',
+  'book.pay_studio_hint': 'Pay on the day, after your visit.',
   'book.mbway_phone': 'MB WAY number',
   'book.policy_short': 'Free cancellation up to {hours} h before.',
   'book.err.slot_unavailable': 'That time was just taken. Please pick another.',
@@ -243,7 +268,7 @@ const en: Record<MsgKey, string> = {
   'booking.add_calendar': 'Add to calendar',
   'booking.cancel': 'Cancel booking',
   'booking.cancel_confirm': 'Are you sure? The time will be offered to someone else.',
-  'booking.cancel_too_late': 'To cancel less than {hours} h before, contact the studio.',
+  'booking.cancel_too_late': 'To cancel less than {hours} h before, please contact us.',
   'booking.cancelled_ok': 'Your booking was cancelled.',
   'booking.contact': 'Questions? Get in touch',
   'booking.not_found': 'We couldn’t find this booking. Check the link in your message.',
@@ -262,6 +287,29 @@ const en: Record<MsgKey, string> = {
   'msg.owner_cancel_body': '{name} cancelled {service} on {when}.\n{admin}',
   'msg.owner_late_subject': 'Action needed: payment received after the deadline',
   'msg.owner_late_body': '{name} paid {amount} for booking {ref} ({when}) after the slot had been released and taken. Contact the customer to rebook or refund.\n{admin}',
+
+  'biz.category': 'Massage',
+  'biz.category@salon': 'Hair salon',
+  'biz.category@barber': 'Barbershop',
+  'biz.category@beauty': 'Beauty salon',
+  'biz.whatsapp_text': 'Hello! I would like to book a treatment.',
+  'biz.whatsapp_text@salon': 'Hello! I would like to book an appointment.',
+  'biz.whatsapp_text@barber': 'Hello! I would like to book an appointment.',
+  'nav.services@salon': 'Services',
+  'nav.services@barber': 'Services',
+  'services.title@salon': 'Services',
+  'services.title@barber': 'Services',
+  'hero.book_cta@salon': 'Book an appointment',
+  'hero.book_cta@barber': 'Book an appointment',
+  'book.title@salon': 'Book an appointment',
+  'book.title@barber': 'Book an appointment',
+  'book.step_service@salon': 'Service',
+  'book.step_service@barber': 'Service',
+  'book.step_staff@salon': 'Stylist',
+  'book.step_staff@barber': 'Barber',
+  'book.step_staff@beauty': 'Beautician',
+  'site.preview_banner': 'Preview: these changes are not published yet.',
+  'site.preview_back': 'Back to dashboard',
 };
 
 const dict: Record<Locale, Record<string, string>> = { pt, en };
@@ -269,6 +317,12 @@ const dict: Record<Locale, Record<string, string>> = { pt, en };
 export function t(locale: Locale, key: MsgKey, vars: Record<string, string | number> = {}): string {
   const s = dict[locale][key] ?? dict.pt[key] ?? key;
   return s.replace(/\{(\w+)\}/g, (_, k: string) => (vars[k] !== undefined ? String(vars[k]) : `{${k}}`));
+}
+
+/** t() with the business type's wording: "key@type" if it exists, else "key". */
+export function tb(locale: Locale, kind: string, key: MsgKey, vars: Record<string, string | number> = {}): string {
+  const variant = `${key}@${kind}`;
+  return t(locale, (variant in dict.pt ? variant : key) as MsgKey, vars);
 }
 
 export function pickLocale(v: unknown, fallback: Locale): Locale {

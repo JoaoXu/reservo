@@ -14,6 +14,7 @@
     "migrate": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/migrate.ts",
     "seed:demo": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/seed-demo.ts",
     "tenant:create": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/create-tenant.ts",
+    "tenant:apply": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/tenant-apply.ts",
     "demo:export": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning scripts/export-demo.ts",
     "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 test/*.test.ts",
     "typecheck": "tsc --noEmit"

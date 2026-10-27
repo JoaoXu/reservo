@@ -7,6 +7,11 @@ import { normalizePhone, FieldErrors, euros } from '../src/lib/validate.ts';
 import { amountToCents, centsToAmount, toMbwayPhone, verifyMbwayNotificationSignature, mapMbwayStatus, verifyCallbackKey } from '../src/domain/payments/ifthenpay.ts';
 import { encryptJson, decryptJson, hashPassword, verifyPassword } from '../src/lib/crypto.ts';
 import { multibancoExpiryDays } from '../src/domain/payments/index.ts';
+import { normalizeSite, sameFields } from '../src/domain/sites.ts';
+import { SpecError, parseClientSpec } from '../src/domain/provision.ts';
+import { t, tb } from '../src/lib/i18n.ts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const TZ = 'Europe/Lisbon';
 
@@ -126,4 +131,55 @@ test('password hashing', async () => {
   const h = await hashPassword('correct horse battery');
   assert.ok(await verifyPassword('correct horse battery', h));
   assert.ok(!(await verifyPassword('wrong', h)));
+});
+
+test('site sections: known types once, services always on, new types appended', () => {
+  const s = normalizeSite({ sections: [
+    { type: 'visit', enabled: true }, { type: 'services', enabled: false }, { type: 'bogus' }, { type: 'visit', enabled: false }, { type: 'team', enabled: false },
+  ] });
+  assert.deepEqual(s.sections.map((x) => x.type), ['visit', 'services', 'team', 'hero', 'about']);
+  assert.equal(s.sections.find((x) => x.type === 'services')!.enabled, true, 'services cannot be hidden');
+  assert.equal(s.sections.find((x) => x.type === 'team')!.enabled, false);
+  assert.deepEqual(normalizeSite(null).sections.map((x) => x.enabled), [true, true, true, true, true]);
+});
+
+test('site versions compare by content, ignoring key order and empty fields', () => {
+  const site = normalizeSite({});
+  assert.ok(sameFields({ name: 'A', content: { city: 'Lisboa', phone: '' }, theme: {}, site }, { name: 'A', content: { city: 'Lisboa' }, theme: {}, site }));
+  assert.ok(!sameFields({ name: 'A', content: { city: 'Lisboa' }, theme: {}, site }, { name: 'A', content: { city: 'Porto' }, theme: {}, site }));
+});
+
+test('business type wording falls back to the default', () => {
+  assert.equal(tb('pt', 'barber', 'book.step_staff'), 'Barbeiro');
+  assert.equal(tb('en', 'salon', 'book.step_staff'), 'Stylist');
+  assert.equal(tb('pt', 'massage', 'book.step_staff'), t('pt', 'book.step_staff'));
+  assert.equal(tb('pt', 'beauty', 'services.title'), t('pt', 'services.title'));
+});
+
+test('client files: the Maré template is valid', () => {
+  const spec = parseClientSpec(JSON.parse(readFileSync(join(import.meta.dirname, '..', 'clients', 'mare.json'), 'utf8')));
+  assert.equal(spec.slug, 'mare');
+  assert.equal(spec.services.length, 7);
+  assert.equal(spec.services[0].price_cents, 5500);
+  const ines = spec.staff.find((s) => s.name === 'Inês Carvalho')!;
+  assert.deepEqual(ines.hours.filter(([wd]) => wd === 4), [[4, 720, 1200]]); // Thursday 12:00-20:00
+  assert.ok(!ines.services.includes('Massagem pré-natal'));
+});
+
+test('client files: every problem is reported with where it is', () => {
+  const bad = {
+    slug: 'Casa Lotus', name: 'Casa', business_type: 'spa', status: 'active',
+    owner: { email: 'nope', name: 'Ana' },
+    payments: { provider: 'mock' },
+    site: { content: { whatsapp: '912 345 678', colour: 'x' }, theme: { ink: 'blue' }, sections: [{ type: 'gallery' }] },
+    services: [{ name_pt: 'Corte', duration_min: 30, price_eur: 12.345 }, { name_pt: 'Corte', duration_min: 2, price_eur: 10 }],
+    staff: [{ name: 'Rui', services: ['Barba'], hours: { mon: ['9-13'], funday: [] } }],
+  };
+  let err: SpecError | undefined;
+  try { parseClientSpec(bad); } catch (e) { err = e as SpecError; }
+  assert.ok(err instanceof SpecError);
+  const expected = ['slug:', 'business_type:', 'owner.email:', 'payments.provider:', 'site.content.whatsapp:', 'site.content.colour:',
+    'site.theme.ink:', 'site.sections[0].type:', 'services[0].price_eur:', 'services[1].name_pt:', 'services[1].duration_min:',
+    'staff[0].services:', 'staff[0].hours.mon:', 'staff[0].hours.funday:'];
+  for (const p of expected) assert.ok(err.problems.some((x) => x.startsWith(p)), `expected a problem for ${p}\n${err.problems.join('\n')}`);
 });

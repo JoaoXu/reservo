@@ -18,6 +18,7 @@ COPY package.json ./
 COPY src ./src
 COPY scripts ./scripts
 COPY migrations ./migrations
+COPY clients ./clients
 COPY public ./public
 USER node
 EXPOSE 8080

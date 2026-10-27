@@ -1,4 +1,4 @@
-import { sql, isExclusionViolation, isUniqueViolation, type Tx } from '../db.ts';
+import { sql, isDeadlock, isExclusionViolation, isUniqueViolation, type Tx } from '../db.ts';
 import { log } from '../lib/log.ts';
 import { randomUUID } from 'node:crypto';
 import { hmacSha256Hex, safeEqual, sha256, shortCode } from '../lib/crypto.ts';
@@ -240,6 +240,7 @@ export async function createBooking(tenant: Tenant, input: CreateBookingInput): 
         } catch (err) {
           if (isExclusionViolation(err)) break; // this therapist was just taken, try the next one
           if (isUniqueViolation(err)) continue; // booking ref collision, retry with a new one
+          if (isDeadlock(err)) continue; // raced another booking for this therapist; retry and see who won
           throw err;
         }
       }

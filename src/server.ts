@@ -21,6 +21,7 @@ import { accountPage, changeLanguage, changePassword, loginPage, loginSubmit, lo
 import { adminSlots, agenda, bookingAction, bookingDetail, bookingList, bookingPay, newBookingForm, newBookingSubmit } from './web/admin/bookings.ts';
 import { serviceForm, serviceSave, servicesPage, staffForm, staffSave, teamPage, timeOffAdd, timeOffDelete, timeOffPage } from './web/admin/catalog.ts';
 import { settingsPage, settingsSave } from './web/admin/settings.ts';
+import { siteAdminPage, siteDiscard, sitePublish, siteRestore, siteSave } from './web/admin/site.ts';
 import { customerErase, customersCsv, customersPage } from './web/admin/customers.ts';
 import { sitePage } from './web/layout.ts';
 
@@ -76,6 +77,11 @@ const site = new Router()
   .get('/admin/time-off', a((ctx) => timeOffPage(ctx)))
   .post('/admin/time-off', a(timeOffAdd))
   .post('/admin/time-off/:id/delete', a(timeOffDelete))
+  .get('/admin/site', o((ctx) => siteAdminPage(ctx)))
+  .post('/admin/site', o(siteSave))
+  .post('/admin/site/publish', o(sitePublish))
+  .post('/admin/site/discard', o(siteDiscard))
+  .post('/admin/site/versions/:id/restore', o(siteRestore))
   .get('/admin/settings', o((ctx) => settingsPage(ctx)))
   .post('/admin/settings', o(settingsSave))
   .get('/admin/customers', o(customersPage))

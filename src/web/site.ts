@@ -1,11 +1,24 @@
 import { sql } from '../db.ts';
 import { html, paragraphs, safeUrl, type SafeHtml } from '../lib/html.ts';
-import { t, loc, type Locale, type MsgKey } from '../lib/i18n.ts';
+import { t, tb, loc, type Locale, type MsgKey } from '../lib/i18n.ts';
 import { formatMoney, formatTime, localDateStr, addDays, minutesToHHMM } from '../lib/time.ts';
 import { htmlReply, type Ctx, type Reply } from '../http/core.ts';
 import { listServices, listStaff, nextOpenings, type Service, type Staff } from '../domain/bookings.ts';
-import type { Tenant } from '../domain/tenants.ts';
+import type { SectionType, Tenant } from '../domain/tenants.ts';
+import { draftVersion, normalizeSite, withVersion } from '../domain/sites.ts';
+import { loadSession } from '../http/guards.ts';
 import { sitePage, whatsappLink } from './layout.ts';
+
+/**
+ * ?preview=1 from a signed-in user of this studio shows the draft instead of
+ * the published site. Anyone else gets the published site.
+ */
+export async function previewTenant(ctx: Ctx): Promise<Tenant | null> {
+  if (ctx.query.get('preview') !== '1' || !ctx.tenant) return null;
+  if (!(await loadSession(ctx))) return null;
+  const draft = await draftVersion(ctx.tenant.id);
+  return draft ? withVersion(ctx.tenant, draft) : null;
+}
 
 /** Studio opening hours per weekday: the union of all therapists' shifts. */
 export async function studioHours(tenantId: string): Promise<Map<number, { start: number; end: number }>> {
@@ -58,7 +71,10 @@ function staffCard(s: Staff, l: Locale): SafeHtml {
 }
 
 export async function homePage(ctx: Ctx): Promise<Reply> {
+  const preview = await previewTenant(ctx);
+  if (preview) ctx.tenant = preview;
   const tenant = ctx.tenant!;
+  const kind = tenant.business_type;
   const l = ctx.locale;
   const c = tenant.content;
   const [services, staff, hours] = await Promise.all([listServices(tenant.id), listStaff(tenant.id), studioHours(tenant.id)]);
@@ -72,20 +88,21 @@ export async function homePage(ctx: Ctx): Promise<Reply> {
     if (g) g.items.push(s); else groups.push({ name: s.category, items: [s] });
   }
 
-  const wa = whatsappLink(c.whatsapp, l === 'en' ? 'Hello! I would like to book a treatment.' : 'Olá! Gostaria de marcar um tratamento.');
+  const wa = whatsappLink(c.whatsapp, tb(l, kind, 'biz.whatsapp_text'));
   const tagline = loc(c as Record<string, unknown>, 'tagline', l) || tenant.name;
   const intro = loc(c as Record<string, unknown>, 'intro', l);
   const about = loc(c as Record<string, unknown>, 'about', l);
   const hoursNote = loc(c as Record<string, unknown>, 'hours_note', l);
   const weekOrder = [1, 2, 3, 4, 5, 6, 0];
 
-  const body = html`
+  const sections: Record<SectionType, () => SafeHtml | ''> = {
+    hero: () => html`
 <section class="hero">
   <div class="hero-copy">
     <h1 class="hero-title">${tagline}</h1>
     ${intro ? html`<p class="hero-intro">${intro}</p>` : ''}
     <div class="hero-actions">
-      <a class="btn" href="/marcar">${t(l, 'hero.book_cta')}</a>
+      <a class="btn" href="/marcar">${tb(l, kind, 'hero.book_cta')}</a>
       ${wa ? html`<a class="btn btn-quiet" href="${wa}" rel="noopener" target="_blank">${t(l, 'hero.whatsapp')}</a>` : ''}
     </div>
   </div>
@@ -102,23 +119,25 @@ export async function homePage(ctx: Ctx): Promise<Reply> {
         <span class="openings-time">${formatTime(o.start, tenant.timezone, l)}</span></a></li>`)}
     </ul>` : html`<p class="muted">${t(l, 'hero.next_none')}</p>`}
   </aside>` : ''}
-</section>
+</section>`,
 
+    services: () => html`
 <section class="section" id="tratamentos" aria-labelledby="services-title">
-  <h2 class="section-title" id="services-title">${t(l, 'services.title')}</h2>
+  <h2 class="section-title" id="services-title">${tb(l, kind, 'services.title')}</h2>
   ${groups.map((g) => html`<div class="menu-group">
     ${g.name ? html`<h3 class="menu-category">${g.name}</h3>` : ''}
     <ul class="menu">${g.items.map((s) => serviceRow(s, l))}</ul>
   </div>`)}
-</section>
+</section>`,
 
-${about ? html`<section class="section about">${paragraphs(about)}</section>` : ''}
+    about: () => (about ? html`<section class="section about">${paragraphs(about)}</section>` : ''),
 
-${staff.length ? html`<section class="section" id="equipa" aria-labelledby="team-title">
+    team: () => (staff.length ? html`<section class="section" id="equipa" aria-labelledby="team-title">
   <h2 class="section-title" id="team-title">${t(l, 'team.title')}</h2>
   <ul class="people">${staff.map((s) => staffCard(s, l))}</ul>
-</section>` : ''}
+</section>` : ''),
 
+    visit: () => html`
 <section class="section visit" id="visite" aria-labelledby="visit-title">
   <h2 class="section-title" id="visit-title">${t(l, 'visit.title')}</h2>
   <div class="visit-grid">
@@ -145,14 +164,19 @@ ${staff.length ? html`<section class="section" id="equipa" aria-labelledby="team
       ${hoursNote ? html`<p class="muted">${hoursNote}</p>` : ''}
     </div>
   </div>
-</section>`;
+</section>`,
+  };
+  const body = html`${normalizeSite(tenant.site).sections.filter((s) => s.enabled).map((s) => sections[s.type]())}`;
+  const where = c.city ? ` | ${tb(l, kind, 'biz.category')} ${l === 'en' ? 'in' : 'em'} ${c.city}` : '';
 
   return htmlReply(sitePage(ctx, {
-    title: `${tenant.name}${c.city ? ` | ${l === 'en' ? 'Massage in' : 'Massagem em'} ${c.city}` : ''}`,
+    title: `${tenant.name}${where}`,
     description: intro || tagline,
     body,
     bodyClass: 'home',
-  }), 200, { 'cache-control': 'private, max-age=60' });
+    preview: !!preview,
+    noindex: !!preview,
+  }), 200, { 'cache-control': preview ? 'private, no-store' : 'private, max-age=60' });
 }
 
 export function privacyPage(ctx: Ctx): Reply {

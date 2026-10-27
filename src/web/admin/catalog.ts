@@ -6,7 +6,7 @@ import { formatDateLong, formatMoney, formatTime, hhmmToMinutes, isDateStr, loca
 import { FieldErrors, bool, euros, httpUrl, int, isUuid, str, uuid } from '../../lib/validate.ts';
 import { HttpError, htmlReply, readBody, redirect, type Ctx, type Reply } from '../../http/core.ts';
 import { listServices, listStaff, type Service, type Staff } from '../../domain/bookings.ts';
-import { adminPage, csrfField, fieldError, flashFrom, tr } from './layout.ts';
+import { adminPage, csrfField, fieldError, flashFrom, staffWord, tr } from './layout.ts';
 
 // --- Treatments -------------------------------------------------------------
 export async function servicesPage(ctx: Ctx): Promise<Reply> {
@@ -120,7 +120,7 @@ export async function teamPage(ctx: Ctx): Promise<Reply> {
   const body = html`
 <header class="adm-head"><h1>${tr(l, 'Equipa', 'Team')}</h1>
   <a class="btn btn-quiet" href="/admin/time-off">${tr(l, 'Folgas e férias', 'Time off')}</a>
-  <a class="btn" href="/admin/team/new">${tr(l, 'Adicionar terapeuta', 'Add therapist')}</a></header>
+  <a class="btn" href="/admin/team/new">${tr(l, 'Adicionar', 'Add')} ${staffWord(ctx).toLowerCase()}</a></header>
 ${staff.length ? html`<table class="table"><thead><tr><th>${tr(l, 'Nome', 'Name')}</th><th>${tr(l, 'Dias', 'Days')}</th><th>${tr(l, 'Online', 'Online')}</th></tr></thead>
   <tbody>${staff.map((s) => html`<tr><td><a href="/admin/team/${s.id}">${s.name}</a></td><td>${summary(s.id) || html`<span class="muted">${tr(l, 'Sem horário', 'No hours set')}</span>`}</td><td>${s.active ? tr(l, 'Sim', 'Yes') : tr(l, 'Inativo', 'Inactive')}</td></tr>`)}</tbody></table>`
   : html`<p class="empty">${tr(l, 'Adicione quem faz os tratamentos e em que dias trabalha.', 'Add who does the treatments and which days they work.')}</p>`}`;
@@ -173,7 +173,7 @@ export async function staffForm(ctx: Ctx, errors: Record<string, string> = {}): 
   <label class="check"><input type="checkbox" name="active" ${s.active ? 'checked' : ''}> ${tr(l, 'Ativo (aparece no site e recebe marcações)', 'Active (shown on the site and bookable)')}</label>
   <button class="btn" type="submit">${tr(l, 'Guardar', 'Save')}</button>
 </form>`;
-  return htmlReply(adminPage(ctx, { title: tr(l, 'Terapeuta', 'Therapist'), body }), Object.keys(errors).length ? 422 : 200);
+  return htmlReply(adminPage(ctx, { title: staffWord(ctx), body }), Object.keys(errors).length ? 422 : 200);
 }
 
 export async function staffSave(ctx: Ctx): Promise<Reply> {
@@ -234,16 +234,16 @@ export async function timeOffPage(ctx: Ctx, errors: Record<string, string> = {})
   const today = localDateStr(new Date(), tz);
   const body = html`
 <h1>${tr(l, 'Folgas e férias', 'Time off')}</h1>
-<p class="muted">${tr(l, 'Bloqueie dias ou horas para um terapeuta ou para todo o estúdio (feriados, formação, férias).', 'Block days or hours for one therapist or the whole studio (holidays, training, vacation).')}</p>
+<p class="muted">${tr(l, 'Bloqueie dias ou horas para uma pessoa da equipa ou para todos (feriados, formação, férias).', 'Block days or hours for one team member or everyone (holidays, training, vacation).')}</p>
 ${rows.length ? html`<ul class="plain">${rows.map((r) => html`<li>
-  <strong>${r.staff_name ?? tr(l, 'Todo o estúdio', 'Whole studio')}</strong>:
+  <strong>${r.staff_name ?? tr(l, 'Todos', 'Everyone')}</strong>:
   ${formatDateLong(r.starts_at, tz, l)} ${formatTime(r.starts_at, tz, l)} – ${formatDateLong(r.ends_at, tz, l)} ${formatTime(r.ends_at, tz, l)}
   ${r.reason ? html`<span class="muted">(${r.reason})</span>` : ''}
   <form method="post" action="/admin/time-off/${r.id}/delete" class="inline">${csrfField(ctx)}<button class="linklike" type="submit">${tr(l, 'Remover', 'Remove')}</button></form>
 </li>`)}</ul>` : html`<p class="empty">${tr(l, 'Sem folgas marcadas.', 'No time off planned.')}</p>`}
 <h2>${tr(l, 'Adicionar', 'Add')}</h2>
 <form method="post" action="/admin/time-off" class="form">${csrfField(ctx)}
-  <label>${tr(l, 'Quem', 'Who')}<select name="staff"><option value="">${tr(l, 'Todo o estúdio', 'Whole studio')}</option>${staff.map((s) => html`<option value="${s.id}">${s.name}</option>`)}</select></label>
+  <label>${tr(l, 'Quem', 'Who')}<select name="staff"><option value="">${tr(l, 'Todos', 'Everyone')}</option>${staff.map((s) => html`<option value="${s.id}">${s.name}</option>`)}</select></label>
   <div class="row">
     <label>${tr(l, 'De (dia)', 'From (day)')}<input type="date" name="from_date" value="${today}" required></label>
     <label>${tr(l, 'Hora', 'Time')}<input type="time" name="from_time" value="00:00"></label>

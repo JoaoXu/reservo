@@ -1,9 +1,10 @@
 import { html, raw, safeUrl, type SafeHtml } from '../lib/html.ts';
-import { t, type Locale } from '../lib/i18n.ts';
+import { t, tb, type Locale } from '../lib/i18n.ts';
 import type { Ctx } from '../http/core.ts';
 import type { Tenant } from '../domain/tenants.ts';
+import { sectionEnabled } from '../domain/sites.ts';
 
-export const ASSET_VERSION = '1';
+export const ASSET_VERSION = '2';
 
 const DEFAULT_THEME = { ink: '#1d3a35', paper: '#eef2ee', accent: '#7a4e63', soft: '#dfe7e1' };
 
@@ -34,6 +35,8 @@ interface PageOpts {
   bodyClass?: string;
   scripts?: string[];
   noindex?: boolean;
+  /** Showing an unpublished draft to its owner. */
+  preview?: boolean;
 }
 
 export function sitePage(ctx: Ctx, opts: PageOpts): SafeHtml {
@@ -56,12 +59,13 @@ ${themeStyle(tenant, ctx.nonce)}
 </head>
 <body class="${opts.bodyClass ?? ''}">
 <a class="skip" href="#main">${l === 'en' ? 'Skip to content' : 'Saltar para o conteúdo'}</a>
+${opts.preview ? html`<div class="preview-bar" role="status">${t(l, 'site.preview_banner')} <a href="/admin/site">${t(l, 'site.preview_back')}</a></div>` : ''}
 <header class="topbar">
   <a class="wordmark" href="/">${logo ? html`<img src="${logo}" alt="${tenant.name}">` : tenant.name}</a>
   <nav class="topnav" aria-label="${l === 'en' ? 'Main' : 'Principal'}">
-    <a href="/#tratamentos">${t(l, 'nav.services')}</a>
-    <a href="/#equipa">${t(l, 'nav.team')}</a>
-    <a href="/#visite">${t(l, 'nav.visit')}</a>
+    ${sectionEnabled(tenant.site, 'services') ? html`<a href="/#tratamentos">${tb(l, tenant.business_type, 'nav.services')}</a>` : ''}
+    ${sectionEnabled(tenant.site, 'team') ? html`<a href="/#equipa">${t(l, 'nav.team')}</a>` : ''}
+    ${sectionEnabled(tenant.site, 'visit') ? html`<a href="/#visite">${t(l, 'nav.visit')}</a>` : ''}
     <a class="lang" href="${langHref(ctx)}" hreflang="${l === 'pt' ? 'en' : 'pt'}">${t(l, 'lang.switch')}</a>
   </nav>
   <a class="btn btn-small" href="/marcar">${t(l, 'nav.book')}</a>

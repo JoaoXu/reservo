@@ -17,6 +17,10 @@ const { tenantById, sealPaymentKeys, invalidateTenantCache } = await import('../
 const { runJobs } = await import('../src/domain/jobs.ts');
 const { zonedToUtc, addDays, localDateStr } = await import('../src/lib/time.ts');
 const { hmacSha256Hex } = await import('../src/lib/crypto.ts');
+const { applyClient, parseClientSpec } = await import('../src/domain/provision.ts');
+const { DEMO_FILE } = await import('../scripts/seed-demo.ts');
+const { readFile } = await import('node:fs/promises');
+const { request } = await import('node:http');
 
 let base = '';
 let server: ReturnType<typeof createAppServer>;
@@ -83,7 +87,8 @@ test('"any therapist" spreads concurrent bookings across free therapists', async
   const attempts = await Promise.allSettled(Array.from({ length: 5 }, (_, i) =>
     createBooking(tenant, { serviceId, staffId: null, start, customer: customer(`+3519200000${10 + i}`), source: 'online', payment: 'studio' })));
   const ok = attempts.filter((a) => a.status === 'fulfilled') as PromiseFulfilledResult<Awaited<ReturnType<typeof createBooking>>>[];
-  assert.equal(ok.length, 3, 'three therapists, three bookings');
+  const failed = attempts.filter((a) => a.status === 'rejected').map((a) => String((a as PromiseRejectedResult).reason?.code ?? (a as PromiseRejectedResult).reason));
+  assert.equal(ok.length, 3, `three therapists, three bookings (failures: ${failed.join(', ')})`);
   assert.equal(new Set(ok.map((o) => o.value.booking.staff_id)).size, 3);
 });
 
@@ -254,4 +259,191 @@ test('admin requires login, CSRF token, and keeps studios apart', async () => {
     body: 'email=demo%40reservo.pt&password=nope',
   });
   assert.equal(wrong.status, 401);
+});
+
+// --- Several businesses, client files, site versions --------------------------
+
+interface Res { status: number; headers: Record<string, string | string[] | undefined>; text: string }
+
+/** HTTP call with an explicit Host header (fetch can't set one), as a browser on that host would. */
+function call(method: string, path: string, opts: { host?: string; cookie?: string; form?: Record<string, string> } = {}): Promise<Res> {
+  const host = opts.host ?? 'localhost';
+  const port = new URL(base).port;
+  const body = opts.form ? new URLSearchParams(opts.form).toString() : undefined;
+  return new Promise((resolve, reject) => {
+    const r = request({
+      host: '127.0.0.1', port, path, method,
+      headers: {
+        host: `${host}:${port}`,
+        ...(opts.cookie ? { cookie: opts.cookie } : {}),
+        ...(body !== undefined ? { 'content-type': 'application/x-www-form-urlencoded', origin: `http://${host}:${port}` } : {}),
+      },
+    }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => (text += c));
+      res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, text }));
+    });
+    r.on('error', reject);
+    r.end(body);
+  });
+}
+
+async function login(host: string, email: string, password: string): Promise<string> {
+  const r = await call('POST', '/admin/login', { host, form: { email, password } });
+  assert.equal(r.status, 303, `login as ${email} on ${host}`);
+  return String(r.headers['set-cookie']).split(';')[0];
+}
+
+async function csrf(host: string, cookie: string): Promise<string> {
+  const r = await call('GET', '/admin/site', { host, cookie });
+  const m = /name="_csrf" value="([^"]+)"/.exec(r.text);
+  assert.ok(m, 'dashboard page has a CSRF token');
+  return m[1];
+}
+
+const BARBER = {
+  slug: 'corte-fino', name: 'Corte Fino', business_type: 'barber', status: 'trial',
+  owner: { email: 'rui@cortefino.example', name: 'Rui Matos' },
+  payments: { mode: 'none' },
+  site: { content: { tagline_pt: 'Cortes clássicos no Bonfim.', city: 'Porto' }, theme: { ink: '#222222', paper: '#f4efe6' } },
+  services: [
+    { name_pt: 'Corte de cabelo', name_en: 'Haircut', duration_min: 30, price_eur: 15 },
+    { name_pt: 'Barba', name_en: 'Beard trim', duration_min: 20, price_eur: 10 },
+  ],
+  staff: [
+    { name: 'Rui Matos', services: 'all', hours: { tue: ['09:00-19:00'], wed: ['09:00-19:00'], sat: ['09:00-14:00'] } },
+    { name: 'Hugo Dias', services: ['Corte de cabelo'], hours: { thu: ['10:00-20:00'] } },
+  ],
+};
+const BARBER_HOST = 'corte-fino.localhost';
+let barberPassword = '';
+
+test('client files: re-applying changes nothing, and a dry run only reports', async () => {
+  const spec = parseClientSpec(JSON.parse(await readFile(DEMO_FILE, 'utf8')));
+  const again = await applyClient(spec, { extraDomains: ['localhost'] });
+  assert.deepEqual(again.changes, [], 'Maré is already exactly as its file describes');
+
+  // Edit the file as a person would: new price, and the last service removed everywhere.
+  const raw = JSON.parse(await readFile(DEMO_FILE, 'utf8'));
+  raw.services[0].price_eur = 59;
+  raw.services = raw.services.filter((x: { name_pt: string }) => x.name_pt !== 'Massagem pré-natal');
+  for (const p of raw.staff) p.services = p.services.filter((n: string) => n !== 'Massagem pré-natal');
+  const plan = await applyClient(parseClientSpec(raw), { dryRun: true });
+  assert.ok(plan.changes.includes('update service "Massagem de relaxamento": price_cents'), plan.changes.join('\n'));
+  assert.ok(plan.changes.includes('deactivate service "Massagem pré-natal" (not in the file)'), plan.changes.join('\n'));
+  const [svc] = await sql<{ price_cents: number }[]>`select price_cents from services where tenant_id = ${tenantId} and name_pt = 'Massagem de relaxamento'`;
+  assert.equal(svc.price_cents, 5500, 'dry run saved nothing');
+});
+
+test('client files: a second business gets its own site, wording and data', async () => {
+  const r = await applyClient(parseClientSpec(BARBER));
+  assert.ok(r.created);
+  assert.ok(r.ownerPassword, 'a new owner gets a one-time password');
+  barberPassword = r.ownerPassword!;
+
+  const home = await call('GET', '/', { host: BARBER_HOST });
+  assert.equal(home.status, 200);
+  assert.match(home.text, /<title>Corte Fino \| Barbearia em Porto<\/title>/);
+  assert.match(home.text, /Cortes clássicos no Bonfim/);
+  assert.match(home.text, /Corte de cabelo/);
+  assert.doesNotMatch(home.text, /Massagem de relaxamento|Maré/, 'nothing from the other business');
+  const book = await call('GET', '/marcar', { host: BARBER_HOST });
+  assert.match(book.text, /Marcar horário/);
+  assert.match(book.text, /"book.step_staff":"Barbeiro"/);
+
+  const mare = await call('GET', '/');
+  assert.match(mare.text, /<title>Maré \| Massagem em Lisboa<\/title>/);
+  assert.doesNotMatch(mare.text, /Corte de cabelo|Corte Fino/);
+
+  // Removing someone from the file deactivates them; re-applying is then a no-op.
+  const fewer = structuredClone(BARBER);
+  fewer.staff.pop();
+  const upd = await applyClient(parseClientSpec(fewer));
+  assert.deepEqual(upd.changes, ['deactivate team member "Hugo Dias" (not in the file)']);
+  assert.deepEqual((await applyClient(parseClientSpec(fewer))).changes, []);
+
+  await assert.rejects(applyClient(parseClientSpec(BARBER), { extraDomains: ['localhost'] }), /already belongs to another business/);
+});
+
+test('site edits go to a draft: only the signed-in owner previews it, then publish and roll back', async () => {
+  const cookie = await login('localhost', 'demo@reservo.pt', 'mare-demo-2026');
+  const token = await csrf('localhost', cookie);
+  const tenant = (await tenantById(tenantId))!;
+  const oldTagline = tenant.content.tagline_pt!;
+  const form: Record<string, string> = { _csrf: token, name: tenant.name };
+  for (const [k, v] of Object.entries(tenant.content)) form[k] = String(v ?? '');
+  form.tagline_pt = 'Frase nova, ainda em rascunho';
+
+  const save = await call('POST', '/admin/site?s=texts', { cookie, form });
+  assert.equal(save.status, 303);
+  assert.match(String(save.headers.location), /ok=draft/);
+
+  // The public, a stranger asking for a preview, and another business's owner all see the published site.
+  assert.match((await call('GET', '/')).text, new RegExp(oldTagline));
+  assert.doesNotMatch((await call('GET', '/?preview=1')).text, /Frase nova/);
+  const barberCookie = await login(BARBER_HOST, BARBER.owner.email, barberPassword);
+  assert.doesNotMatch((await call('GET', '/?preview=1', { cookie: barberCookie })).text, /Frase nova/);
+
+  const preview = await call('GET', '/?preview=1', { cookie });
+  assert.match(preview.text, /Frase nova, ainda em rascunho/);
+  assert.match(preview.text, /class="preview-bar"/);
+  assert.match(preview.text, /<meta name="robots" content="noindex">/);
+  assert.equal(preview.headers['cache-control'], 'private, no-store');
+  assert.doesNotMatch(String((await call('GET', '/')).headers['cache-control']), /public/, 'pages are never cacheable by shared caches');
+
+  const before = await sql<{ id: string; number: number }[]>`select id, number from site_versions where tenant_id = ${tenantId} and status = 'published'`;
+  const pub = await call('POST', '/admin/site/publish', { cookie, form: { _csrf: token } });
+  assert.match(String(pub.headers.location), /ok=published/);
+  assert.match((await call('GET', '/')).text, /Frase nova, ainda em rascunho/);
+
+  // Another business can't restore (or even find) Maré's versions.
+  const barberToken = await csrf(BARBER_HOST, barberCookie);
+  const cross = await call('POST', `/admin/site/versions/${before[0].id}/restore`, { host: BARBER_HOST, cookie: barberCookie, form: { _csrf: barberToken } });
+  assert.equal(cross.status, 404);
+
+  const restore = await call('POST', `/admin/site/versions/${before[0].id}/restore`, { cookie, form: { _csrf: token } });
+  assert.match(String(restore.headers.location), /ok=restored/);
+  assert.match((await call('GET', '/')).text, new RegExp(oldTagline));
+  const [latest] = await sql<{ note: string; status: string }[]>`select note, status from site_versions where tenant_id = ${tenantId} order by number desc limit 1`;
+  assert.deepEqual(latest, { note: `Restored version ${before[0].number}`, status: 'published' });
+
+  // Discarding a draft leaves the live site alone.
+  await call('POST', '/admin/site?s=look', { cookie, form: { _csrf: token, ink: '#000000', paper: '#ffffff', accent: '#ff0000', soft: '#eeeeee' } });
+  assert.equal((await call('POST', '/admin/site/discard', { cookie, form: { _csrf: token } })).status, 303);
+  const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from site_versions where tenant_id = ${tenantId} and status = 'draft'`;
+  assert.equal(n, 0);
+  assert.doesNotMatch((await call('GET', '/')).text, /--accent:#ff0000/);
+});
+
+test('only the owner can change the website', async () => {
+  const { hashPassword } = await import('../src/lib/crypto.ts');
+  await sql`insert into users (tenant_id, email, name, password_hash, role) values (${tenantId}, 'staff@mare.example', 'Inês', ${await hashPassword('staff-pass-123')}, 'staff')`;
+  const cookie = await login('localhost', 'staff@mare.example', 'staff-pass-123');
+  assert.equal((await call('GET', '/admin/site', { cookie })).status, 403);
+  // Staff can still preview a draft (they can sign in), but not publish it.
+  const agenda = await call('GET', '/admin', { cookie });
+  const token = /name="_csrf" value="([^"]+)"/.exec(agenda.text)![1];
+  assert.equal((await call('POST', '/admin/site/publish', { cookie, form: { _csrf: token } })).status, 403);
+});
+
+test('sections can be hidden and reordered', async () => {
+  const cookie = await login('localhost', 'demo@reservo.pt', 'mare-demo-2026');
+  const token = await csrf('localhost', cookie);
+  await call('POST', '/admin/site?s=sections', { cookie, form: {
+    _csrf: token, show_hero: 'on', show_about: 'on', show_visit: 'on', // team hidden
+    order_hero: '2', order_services: '3', order_about: '4', order_team: '5', order_visit: '1',
+  } });
+  await call('POST', '/admin/site/publish', { cookie, form: { _csrf: token } });
+  const home = (await call('GET', '/')).text;
+  assert.doesNotMatch(home, /id="equipa"/);
+  assert.doesNotMatch(home, /href="\/#equipa"/);
+  assert.ok(home.indexOf('id="visite"') < home.indexOf('id="tratamentos"'), 'visit section moved first');
+
+  // Back to the template: the client file wins only when asked, because an owner published since.
+  const spec = parseClientSpec(JSON.parse(await readFile(DEMO_FILE, 'utf8')));
+  const kept = await applyClient(spec);
+  assert.ok(kept.warnings.some((w) => w.includes('--overwrite-site')), kept.warnings.join('\n'));
+  await applyClient(spec, { overwriteSite: true });
+  assert.match((await call('GET', '/')).text, /id="equipa"/);
 });

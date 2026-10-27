@@ -1,19 +1,59 @@
-# Onboarding a studio (about one hour of your time)
+# Onboarding a business
 
-## Before the visit
+## Before the visit: write their client file
 
-1. Create the studio:
-   ```bash
-   npm run tenant:create -- --slug casa-lotus --name "Casa Lótus" \
-     --owner-email ana@casalotus.pt --owner-name "Ana Lima" --trial-days 30
-   ```
-   It prints a one-time password. The site is live at
-   `https://casa-lotus.reservo.pt` straight away.
-2. From their Instagram, Google listing or price sheet, fill in **Settings →
-   Studio and texts** (headline, intro, address, map link, phone, WhatsApp),
-   **Treatments** (names, length, break after, price, both languages) and
-   **Team** (each person's weekly hours). Owners rarely do this themselves,
-   and a site with their real prices is what sells it.
+Each business is one file, `clients/<slug>.json`: texts, colours, sections,
+services, team and hours, gathered from their Instagram, Google listing or
+price sheet. Owners rarely do this themselves, and a site with their real
+prices is what sells it. Start from `clients/mare.json` (the fictional demo).
+
+```bash
+cp clients/mare.json clients/casa-lotus.json   # then edit it
+npm run tenant:apply -- clients/casa-lotus.json --dry-run   # shows what would change
+npm run tenant:apply -- clients/casa-lotus.json
+```
+
+The first run creates the business and prints the owner's one-time password.
+The site is live at `https://casa-lotus.<platform domain>` straight away
+(today `casa-lotus.reservo.joaoxu.dev`). Re-running applies only what changed,
+so the file is also how you update it while setting it up. Commit the file.
+
+Against production, run it as a one-off task from `deploy/aws`:
+`./run-task.sh node scripts/tenant-apply.ts clients/casa-lotus.json` (the
+file must be in the deployed image, so commit and release first). The
+password appears in the task output printed by `run-task.sh`.
+
+### File format
+
+| Field | Notes |
+|---|---|
+| `slug` | Lowercase letters, digits, dashes. Becomes `<slug>.<platform domain>`. |
+| `name`, `business_type` | `massage`, `salon`, `barber` or `beauty`. The type sets the wording ("Terapeuta", "Barbeiro", "Serviços"...). |
+| `status` | `trial` (default for new), `active`, or `demo` (simulated payments; only for Maré). |
+| `owner` | `{ "email", "name" }`. Created once; an existing password is never touched. |
+| `booking` | `slot_interval_min` (10/15/20/30/60), `min_lead_hours`, `max_advance_days`, `cancel_window_hours`. |
+| `payments` | `mode` (`none`/`deposit`/`full`), `deposit_percent`, `pay_at_studio_allowed`, `provider` (`none`/`ifthenpay`). Keys are never in the file: enter them in the dashboard. |
+| `site.content` | Texts in `_pt`/`_en`, address, `map_url` (https), `phone`, `whatsapp` (`+351…`), `email`, `instagram`, `legal_name`, `nif`. |
+| `site.theme` | `ink`, `paper`, `accent`, `soft` as `#rrggbb`; optional `logo_url` (https). |
+| `site.sections` | Order and visibility of `hero`, `services`, `about`, `team`, `visit`. Services can't be hidden. |
+| `services[]` | `name_pt` (the key, keep it stable), `name_en`, `category`, descriptions, `duration_min`, `buffer_min`, `price_eur`. |
+| `staff[]` | `name` (the key), titles and bios, `services` (`"all"` or a list of `name_pt`), `hours` like `{ "mon": ["10:00-13:00", "14:00-19:00"] }`. |
+
+Services and people are matched by name. Remove one from the file and it is
+deactivated (past bookings keep pointing at it); rename one and it counts as
+removed plus added.
+
+**After hand-over the owner edits in the dashboard.** If they have published
+their own site changes, `tenant:apply` leaves the site alone and says so;
+`--overwrite-site` replaces it (their versions stay in the history). Services,
+team and hours in the file always win, so stop applying the file once the
+owner manages those themselves.
+
+## Website edits: draft, preview, publish
+
+In the dashboard, **Site** holds the texts, look and section order. Changes go
+into a draft; **Preview** shows it on their real site to signed-in users only;
+**Publish** makes it live; **History** can restore any earlier version.
 
 ## Payments (ifthenpay)
 

@@ -59,12 +59,23 @@ TypeScript directly: there is no build step.
 - Schema changes: add a new `migrations/00N_*.sql`; never edit an applied one.
   Keep migrations additive so old and new app versions can run together.
 - Run `npm test` and `npm run typecheck` before calling anything done.
+- **Public site content is versioned** (`src/domain/sites.ts`): edits go to a
+  draft in `site_versions`; publishing copies name/content/theme/site into
+  `tenants`, which always holds the published version (everything else reads
+  the tenant). Never write those four tenant columns directly.
+- **Business-type wording** (massage/salon/barber/beauty): `tb(l, type, key)`
+  looks up `key@type` in `i18n.ts`, falling back to `key` (massage wording).
+  In the dashboard use `staffWord(ctx)`, never a hard-coded "Terapeuta".
+- **Businesses are set up from client files** (`clients/<slug>.json`,
+  `src/domain/provision.ts`, `npm run tenant:apply`): idempotent, matched by
+  name, missing services/staff deactivated. Maré is fictional: it is the
+  template and the demo, and must always work end to end.
 
-Map: `src/domain/` (bookings, availability, payments/ifthenpay, notify, jobs),
+Map: `src/domain/` (bookings, availability, payments/ifthenpay, notify, jobs, sites, provision),
 `src/web/` (site, booking flow, hooks, admin), `src/http/` (router, sessions,
 rate limits), `docs/` (ARCHITECTURE, DEPLOY, ONBOARDING).
 
-## Current status (23 Oct 2026)
+## Current status (27 Oct 2026)
 
 Done and tested locally: template, booking engine (DB exclusion constraint
 prevents double bookings), ifthenpay MB WAY/Multibanco/card client and
@@ -115,13 +126,38 @@ estimate ~$56 plus $0.50 for the Route 53 zone.
 - Operating it: `deploy/aws/README.md` and the `Makefile` (`release`, `migrate`,
   `seed`, `smoke`).
 
-## Next candidates
+## Platform roadmap (agreed 27 Oct 2026)
 
-- Pick the name and buy the real domain; move off the joaoxu.dev test domain.
-- GitHub Actions deploy to AWS with OIDC (no stored keys): push to ECR, run
-  the migrate task, update the service on merges to `main`.
-- Before the first paying studio: ifthenpay sandbox test, an RDS restore
-  test, decide on Multi-AZ (~€14/month).
+Goal: dozens of appointment businesses (massage, salons, barbers, beauty) on
+one deployment, each with its own website and, later, its own domain.
+Restaurants are out of scope for now (different booking model).
+Decisions: one shared database with `tenant_id` everywhere (no per-tenant
+DBs); custom domains via **option A**: one ACM certificate per domain on the
+ALB, the client's DNS in Route 53 (we register or take over their domain),
+platform subdomain kept as preview/fallback; S3 access signed by hand with
+`node:crypto` (no AWS SDK) unless the founder says otherwise.
+
+1. **Done (27 Oct):** business types, client files + `tenant:apply`, site
+   versions with draft/preview/publish/rollback, Site page in the dashboard,
+   section visibility/order. Also fixed: "any therapist" bookings could fail
+   with a deadlock (40P01) under concurrency; now retried.
+2. Templates and editor: 2-3 layouts sharing sections (add gallery,
+   testimonials, FAQ), curated theme (palette with contrast check, font
+   pairs), English service categories.
+3. Media: private S3 bucket + CloudFront (`media.<domain>`), uploads through
+   the app (5 MB, JPEG/PNG/WebP by magic bytes), `media` table per tenant,
+   tighter CSP `img-src`.
+4. Custom domains: domains map in Terraform (zone, cert, alias apex + www,
+   listener certificate), domain status pending -> active, `tenant:domain`
+   command, primary-domain redirect. Only the platform admin attaches domains.
+5. Hardening: Postgres row-level security; ignore client `X-Forwarded-Host`
+   behind the ALB (it passes the header through; matters once a cache sits in
+   front); wider cross-tenant and caching tests.
+
+Other open items: GitHub Actions deploy to AWS with OIDC; ifthenpay sandbox
+test and an RDS restore test before the first paying business; Multi-AZ
+(~€14/month); refund wording on cancelled bookings (refunds are manual in
+ifthenpay).
 
 ## Safety rules for infrastructure work
 

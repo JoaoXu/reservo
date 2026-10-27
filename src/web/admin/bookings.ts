@@ -1,6 +1,6 @@
 import { sql } from '../../db.ts';
 import { html, raw, type SafeHtml } from '../../lib/html.ts';
-import { loc, type Locale } from '../../lib/i18n.ts';
+import { loc, tb, type Locale } from '../../lib/i18n.ts';
 import { addDays, formatDateLong, formatMoney, formatTime, hhmmToMinutes, isDateStr, localDateStr, minutesToHHMM, toLocalParts, zonedToUtc } from '../../lib/time.ts';
 import { FieldErrors, bool, email as emailField, euros, isUuid, oneOf, phone as phoneField, str, uuid } from '../../lib/validate.ts';
 import { HttpError, htmlReply, jsonReply, readBody, redirect, type Ctx, type Reply } from '../../http/core.ts';
@@ -12,7 +12,7 @@ import { availableMethods } from '../../domain/payments/index.ts';
 import { afterBookingCancelled, afterBookingCreated } from '../../domain/events.ts';
 import { notifyConfirmed, formatReference } from '../../domain/notify.ts';
 import { whatsappLink } from '../layout.ts';
-import { adminPage, csrfField, fieldError, flashFrom, tr } from './layout.ts';
+import { adminPage, csrfField, fieldError, flashFrom, staffWord, tr } from './layout.ts';
 import { studioHours } from '../site.ts';
 
 const STATUS: Record<string, [string, string]> = {
@@ -110,7 +110,7 @@ ${staff.length ? html`<div class="agenda">
       </a>`)}
     </div>
   </section>`)}
-</div>` : html`<p class="empty">${tr(l, 'Adicione a equipa e o horário de trabalho para começar a receber marcações.', 'Add your team and their working hours to start taking bookings.')} <a href="/admin/team/new">${tr(l, 'Adicionar terapeuta', 'Add therapist')}</a></p>`}`;
+</div>` : html`<p class="empty">${tr(l, 'Adicione a equipa e o horário de trabalho para começar a receber marcações.', 'Add your team and their working hours to start taking bookings.')} <a href="/admin/team/new">${tr(l, 'Adicionar', 'Add')} ${staffWord(ctx).toLowerCase()}</a></p>`}`;
   return htmlReply(adminPage(ctx, { title: tr(l, 'Agenda', 'Agenda'), body, flash: flashFrom(ctx) }));
 }
 
@@ -152,7 +152,7 @@ export async function bookingList(ctx: Ctx): Promise<Reply> {
   <button class="btn btn-quiet" type="submit">${tr(l, 'Procurar', 'Search')}</button>
 </form>
 ${rows.length ? html`<table class="table">
-  <thead><tr><th>${tr(l, 'Quando', 'When')}</th><th>${tr(l, 'Cliente', 'Customer')}</th><th>${tr(l, 'Tratamento', 'Treatment')}</th><th>${tr(l, 'Terapeuta', 'Therapist')}</th><th>${tr(l, 'Estado', 'Status')}</th></tr></thead>
+  <thead><tr><th>${tr(l, 'Quando', 'When')}</th><th>${tr(l, 'Cliente', 'Customer')}</th><th>${tb(l, ctx.tenant!.business_type, 'book.step_service')}</th><th>${staffWord(ctx)}</th><th>${tr(l, 'Estado', 'Status')}</th></tr></thead>
   <tbody>${rows.map((b) => html`<tr>
     <td><a href="/admin/bookings/${b.id}">${formatDateLong(b.starts_at, tz, l)}, ${formatTime(b.starts_at, tz, l)}</a></td>
     <td>${b.customer_name}<br><span class="muted">${b.customer_phone}</span></td>
@@ -185,13 +185,13 @@ export async function bookingDetail(ctx: Ctx): Promise<Reply> {
     <dl class="facts">
       <div><dt>${tr(l, 'Quando', 'When')}</dt><dd>${formatDateLong(b.starts_at, tz, l)}, ${formatTime(b.starts_at, tz, l)}–${formatTime(b.ends_at, tz, l)}</dd></div>
       <div><dt>${tr(l, 'Tratamento', 'Treatment')}</dt><dd>${serviceName(b, l)}, ${b.duration_min} min</dd></div>
-      <div><dt>${tr(l, 'Terapeuta', 'Therapist')}</dt><dd>${b.staff_name}</dd></div>
+      <div><dt>${staffWord(ctx)}</dt><dd>${b.staff_name}</dd></div>
       <div><dt>${tr(l, 'Telemóvel', 'Phone')}</dt><dd><a href="tel:${b.customer_phone}">${b.customer_phone}</a></dd></div>
       ${b.customer_email ? html`<div><dt>Email</dt><dd><a href="mailto:${b.customer_email}">${b.customer_email}</a></dd></div>` : ''}
       ${b.customer_note ? html`<div><dt>${tr(l, 'Nota do cliente', 'Customer note')}</dt><dd>${b.customer_note}</dd></div>` : ''}
       <div><dt>${tr(l, 'Preço', 'Price')}</dt><dd>${formatMoney(b.price_cents, l)}</dd></div>
       <div><dt>${tr(l, 'Pago', 'Paid')}</dt><dd>${formatMoney(b.paid_cents, l)}${remaining > 0 && b.status !== 'cancelled' ? html` <span class="muted">(${tr(l, 'falta', 'remaining')} ${formatMoney(remaining, l)})</span>` : ''}</dd></div>
-      <div><dt>${tr(l, 'Código', 'Code')}</dt><dd>${b.ref}, ${b.source === 'online' ? tr(l, 'marcada online', 'booked online') : tr(l, 'marcada pelo estúdio', 'booked by the studio')}</dd></div>
+      <div><dt>${tr(l, 'Código', 'Code')}</dt><dd>${b.ref}, ${b.source === 'online' ? tr(l, 'marcada online', 'booked online') : tr(l, 'marcada pela equipa', 'booked by staff')}</dd></div>
       ${b.cancel_reason === 'paid_after_slot_taken' ? html`<div class="warn"><dt>${tr(l, 'Atenção', 'Action needed')}</dt><dd>${tr(l, 'O cliente pagou depois do prazo e o horário já estava ocupado. Contacte-o para remarcar ou devolver o dinheiro no backoffice da ifthenpay.', 'The customer paid after the deadline and the slot was already taken. Contact them to rebook, or refund in the ifthenpay back office.')}</dd></div>` : ''}
     </dl>
     <p class="actions-row">
@@ -293,7 +293,7 @@ ${message ? html`<p class="flash flash-error" role="alert">${message}</p>` : ''}
       <select name="service" required class="js-slot-input">
         ${services.map((s) => html`<option value="${s.id}" ${v('service') === s.id ? 'selected' : ''}>${loc(s as unknown as Record<string, unknown>, 'name', l)} (${s.duration_min} min, ${formatMoney(s.price_cents, l)})</option>`)}
       </select>${fieldError(errors, 'service', l)}</label>
-    <label>${tr(l, 'Terapeuta', 'Therapist')}
+    <label>${staffWord(ctx)}
       <select name="staff" class="js-slot-input">
         <option value="">${tr(l, 'Quem estiver livre', 'Whoever is free')}</option>
         ${staff.map((s) => html`<option value="${s.id}" ${v('staff') === s.id ? 'selected' : ''}>${s.name}</option>`)}
@@ -354,7 +354,7 @@ export async function newBookingSubmit(ctx: Ctx): Promise<Reply> {
   } catch (err) {
     if (err instanceof BookingError) {
       const msg = err.code === 'slot_unavailable'
-        ? tr(l, 'Este horário não está livre para esse tratamento. Escolha outra hora ou terapeuta, ou permita fora do horário.', 'That time isn’t free for this treatment. Pick another time or therapist, or allow outside working hours.')
+        ? tr(l, 'Este horário não está livre. Escolha outra hora ou outra pessoa, ou permita fora do horário.', 'That time isn’t free. Pick another time or person, or allow outside working hours.')
         : err.code.startsWith('payment_')
           ? tr(l, 'Não foi possível pedir o pagamento. Verifique o telemóvel (MB WAY precisa de número português) ou escolha “Paga no dia”.', 'The payment request failed. Check the phone (MB WAY needs a Portuguese number) or choose “Pays on the day”.')
           : tr(l, 'Não foi possível criar a marcação.', 'The booking couldn’t be created.');

@@ -9,7 +9,7 @@ TAG ?= $(shell git rev-parse --short HEAD)
 TF_VARS = -var image_tag=$(TAG)
 out = $(shell terraform output -raw $(1))
 # Paths baked into the image (everything else is in .dockerignore)
-IMAGE_PATHS = src scripts migrations public package.json package-lock.json Dockerfile
+IMAGE_PATHS = src scripts migrations clients public package.json package-lock.json Dockerfile
 
 .PHONY: init plan apply login build push migrate-def migrate release seed smoke
 
