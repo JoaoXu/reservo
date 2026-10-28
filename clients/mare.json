@@ -47,7 +47,8 @@
     "template": "classic",
     "theme": {
       "palette": "salvia",
-      "font": "serif"
+      "font": "serif",
+      "cover": "mare/oleos.jpg"
     },
     "sections": [
       {
@@ -81,6 +82,28 @@
       {
         "type": "visit",
         "enabled": true
+      }
+    ],
+    "gallery": [
+      {
+        "image": "mare/sala.jpg",
+        "alt_pt": "Sala de massagem com marquesa de madeira e parede de bambu iluminada",
+        "alt_en": "Treatment room with a wooden table and a lit bamboo wall"
+      },
+      {
+        "image": "mare/massagem.jpg",
+        "alt_pt": "Massagem às costas com óleo",
+        "alt_en": "Back massage with oil"
+      },
+      {
+        "image": "mare/toalhas.jpg",
+        "alt_pt": "Toalha, velas acesas e difusor de aromas",
+        "alt_en": "Towel, lit candles and a reed diffuser"
+      },
+      {
+        "image": "mare/vela.jpg",
+        "alt_pt": "Vela num queimador de óleos de cerâmica",
+        "alt_en": "Candle in a ceramic oil burner"
       }
     ],
     "testimonials": [

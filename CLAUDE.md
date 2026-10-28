@@ -71,6 +71,13 @@ TypeScript directly: there is no build step.
   name, missing services/staff deactivated. The demos are fictional and must
   always work end to end: Maré (massage, Classic template) and Navalha
   (barbershop in Porto, Studio template); `npm run seed:demo` resets both.
+- **Images come only from the business's own library** (`src/domain/media.ts`):
+  stored at `t/<tenant_id>/<file>` (local folder in dev/tests, S3 + CloudFront
+  in production); site JSON keeps file names only, URLs are built with the
+  tenant's own id; staff photos have a composite FK. Uploads are checked by
+  content and stripped of metadata (`src/lib/images.ts`); S3 calls are signed
+  by hand (`src/lib/sigv4.ts`, tested against the AWS example). CSP `img-src`
+  is `'self' data:` plus the media origin: no external image links.
 - **Design is curated** (`src/domain/design.ts`): templates, font pairings and
   preset palettes. Every palette, preset or custom, must pass the contrast
   rules (4.5:1); Studio CSS never puts accent-coloured text on ink.
@@ -150,9 +157,14 @@ platform subdomain kept as preview/fallback; S3 access signed by hand with
    custom colours with a WCAG contrast check, two font pairings, English
    service categories, the Navalha barbershop demo. Gallery takes https links
    until uploads exist.
-3. Media: private S3 bucket + CloudFront (`media.<domain>`), uploads through
-   the app (5 MB, JPEG/PNG/WebP by magic bytes), `media` table per tenant,
-   tighter CSP `img-src`.
+3. **Done (28 Oct):** photo library (`media` table, Fotos page, uploads resized
+   and GPS-stripped in the browser, re-checked and stripped on the server),
+   logo, cover photo, gallery and team photos from the library, client files
+   upload photos next to them, private S3 bucket + CloudFront at
+   `media.reservo.joaoxu.dev` (`deploy/aws/media.tf`), ECS task role limited to
+   put/delete under `t/*`, S3 gateway endpoint, CSP without `https:` images.
+   Demo photos are Unsplash (see `clients/CREDITS.md`). No server-side
+   resizing/thumbnails yet (would need `sharp` or an image CDN).
 4. Custom domains: domains map in Terraform (zone, cert, alias apex + www,
    listener certificate), domain status pending -> active, `tenant:domain`
    command, primary-domain redirect. Only the platform admin attaches domains.

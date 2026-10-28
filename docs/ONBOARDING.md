@@ -37,13 +37,20 @@ password appears in the task output printed by `run-task.sh`.
 | `payments` | `mode` (`none`/`deposit`/`full`), `deposit_percent`, `pay_at_studio_allowed`, `provider` (`none`/`ifthenpay`). Keys are never in the file: enter them in the dashboard. |
 | `site.content` | Texts in `_pt`/`_en`, address, `map_url` (https), `phone`, `whatsapp` (`+351…`), `email`, `instagram`, `legal_name`, `nif`. |
 | `site.template` | `classic` (calm, serif; massage, spa, beauty) or `studio` (bold, dark; barbers, salons). |
-| `site.theme` | `palette`: `salvia`, `terracota`, `carvao`, `rosa`, `oceano`, `oliva`; any of `ink`, `paper`, `accent`, `soft` (`#rrggbb`) override it and must keep 4.5:1 contrast. `font`: `serif` or `sans` (defaults to the template's). Optional `logo_url` (https). |
+| `site.theme` | `palette`: `salvia`, `terracota`, `carvao`, `rosa`, `oceano`, `oliva`; any of `ink`, `paper`, `accent`, `soft` (`#rrggbb`) override it and must keep 4.5:1 contrast. `font`: `serif` or `sans` (defaults to the template's). `logo` and `cover`: image paths (see below). |
 | `site.sections` | Order and visibility of `hero`, `services`, `about`, `team`, `gallery`, `testimonials`, `faq`, `visit`. Services can't be hidden; empty sections don't show. |
-| `site.gallery[]` | Up to 12 `{ "url" (https), "alt_pt", "alt_en" }`. |
+| `site.gallery[]` | Up to 12 `{ "image", "alt_pt", "alt_en" }`. |
 | `site.testimonials[]` | Up to 6 `{ "quote_pt", "quote_en", "author" }`. Real clients, with permission. |
 | `site.faq[]` | Up to 12 `{ "q_pt", "a_pt", "q_en", "a_en" }`. |
 | `services[]` | `name_pt` (the key, keep it stable), `name_en`, `category`, `category_en`, descriptions, `duration_min`, `buffer_min`, `price_eur`. |
-| `staff[]` | `name` (the key), titles and bios, `services` (`"all"` or a list of `name_pt`), `hours` like `{ "mon": ["10:00-13:00", "14:00-19:00"] }`. |
+| `staff[]` | `name` (the key), titles and bios, optional `photo` (image path), `services` (`"all"` or a list of `name_pt`), `hours` like `{ "mon": ["10:00-13:00", "14:00-19:00"] }`. |
+
+**Images** are paths relative to the client file, e.g. put the business's
+photos in `clients/casa-lotus/` and write `"cover": "casa-lotus/sala.jpg"`.
+`tenant:apply` uploads them into the business's photo library (named by
+content, so re-applying never duplicates) after the same checks as dashboard
+uploads: JPEG, PNG or WebP by content, metadata stripped. Resize big photos to
+about 2000px first. Owners can also upload in the dashboard under **Fotos**.
 
 Services and people are matched by name. Remove one from the file and it is
 deactivated (past bookings keep pointing at it); rename one and it counts as
@@ -57,7 +64,9 @@ owner manages those themselves.
 
 ## Website edits: draft, preview, publish
 
-In the dashboard, **Site** holds the texts, look (template, colours, font),
+In the dashboard, **Fotos** is the photo library (uploads are resized on the
+owner's phone and stripped of GPS location before they leave it), and
+**Site** holds the texts, look (template, colours, font, logo, cover photo),
 section order, gallery, testimonials and FAQ. Changes go into a draft; **Preview** shows it on their real site to signed-in users only;
 **Publish** makes it live; **History** can restore any earlier version.
 

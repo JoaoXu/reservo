@@ -4,7 +4,7 @@
 // no messages are sent. Extra domains (e.g. "localhost") go to Maré.
 //   npm run seed:demo -- [extra-domain...] [--with-bookings]
 import { readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { sql, closeDb } from '../src/db.ts';
 import { isMain } from '../src/lib/main.ts';
 import { config } from '../src/config.ts';
@@ -24,7 +24,7 @@ export async function seedDemoFile(file: string, extraDomains: string[] = [], ow
   const spec = parseClientSpec(JSON.parse(await readFile(file, 'utf8')));
   if (spec.status !== 'demo') throw new Error(`${file} is not a demo business`);
   await sql`delete from tenants where slug = ${spec.slug}`;
-  const r = await applyClient(spec, { extraDomains, ownerPassword });
+  const r = await applyClient(spec, { extraDomains, ownerPassword, baseDir: dirname(file) });
   return { id: r.tenantId, slug: spec.slug, name: spec.name, email: spec.owner.email, password: ownerPassword ?? spec.owner.password };
 }
 

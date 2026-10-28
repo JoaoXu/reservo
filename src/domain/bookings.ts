@@ -13,8 +13,8 @@ export interface Service {
   duration_min: number; buffer_min: number; price_cents: number; active: boolean; sort: number;
 }
 export interface Staff {
-  id: string; name: string; title_pt: string; title_en: string; bio_pt: string; bio_en: string;
-  photo_url: string | null; active: boolean; sort: number;
+  id: string; tenant_id: string; name: string; title_pt: string; title_en: string; bio_pt: string; bio_en: string;
+  photo_file: string | null; active: boolean; sort: number;
 }
 
 export async function listServices(tenantId: string, activeOnly = true): Promise<Service[]> {

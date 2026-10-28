@@ -6,6 +6,7 @@
 import { sql, type Tx } from '../db.ts';
 import { SECTION_TYPES, invalidateTenantCache, type SectionType, type SiteConfig, type Tenant, type TenantContent, type TenantTheme } from './tenants.ts';
 import { TEMPLATES, type Template } from './design.ts';
+import { FILE_RE } from './media.ts';
 
 export interface SiteVersion {
   id: string;
@@ -39,16 +40,14 @@ export function defaultSite(): SiteConfig {
 type Obj = Record<string, unknown>;
 const text = (o: Obj, k: string, max: number): string => (typeof o[k] === 'string' ? (o[k] as string).trim().replace(/\u0000/g, '').slice(0, max) : '');
 const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter((x): x is Obj => !!x && typeof x === 'object') : []);
-const isHttps = (u: string): boolean => {
-  try { return new URL(u).protocol === 'https:'; } catch { return false; }
-};
 
 /**
  * Cleans a stored or submitted layout: known section types only, each once,
  * in the given order; missing types are inserted at their default position
  * (enabled) so new section types show up on existing sites. Services must
  * stay on: it's how people book. Lists are trimmed to their limits and rows
- * without their required text are dropped.
+ * without their required text are dropped. Gallery items are library file
+ * names; anything else (e.g. an old external link) is dropped.
  */
 export function normalizeSite(raw: unknown): SiteConfig {
   const input = (raw && typeof raw === 'object' ? raw : {}) as Obj;
@@ -68,8 +67,8 @@ export function normalizeSite(raw: unknown): SiteConfig {
   }
 
   const gallery = list(input.gallery)
-    .map((g) => ({ url: text(g, 'url', 500), alt_pt: text(g, 'alt_pt', 140), alt_en: text(g, 'alt_en', 140) }))
-    .filter((g) => isHttps(g.url))
+    .map((g) => ({ file: text(g, 'file', 60), alt_pt: text(g, 'alt_pt', 140), alt_en: text(g, 'alt_en', 140) }))
+    .filter((g) => FILE_RE.test(g.file))
     .slice(0, LIMITS.gallery);
   const testimonials = list(input.testimonials)
     .map((q) => ({ quote_pt: text(q, 'quote_pt', 400), quote_en: text(q, 'quote_en', 400), author: text(q, 'author', 60) }))

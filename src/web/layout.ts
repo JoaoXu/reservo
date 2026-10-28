@@ -1,11 +1,12 @@
-import { html, raw, safeUrl, type SafeHtml } from '../lib/html.ts';
+import { html, raw, type SafeHtml } from '../lib/html.ts';
 import { t, tb, type Locale } from '../lib/i18n.ts';
 import type { Ctx } from '../http/core.ts';
 import type { Tenant } from '../domain/tenants.ts';
 import { normalizeSite, sectionEnabled } from '../domain/sites.ts';
 import { TEMPLATE_INFO, type Font } from '../domain/design.ts';
+import { mediaUrl } from '../domain/media.ts';
 
-export const ASSET_VERSION = '3';
+export const ASSET_VERSION = '4';
 
 const DEFAULT_THEME = { ink: '#1d3a35', paper: '#eef2ee', accent: '#7a4e63', soft: '#dfe7e1' };
 
@@ -51,7 +52,7 @@ interface PageOpts {
 export function sitePage(ctx: Ctx, opts: PageOpts): SafeHtml {
   const tenant = ctx.tenant!;
   const l: Locale = ctx.locale;
-  const logo = safeUrl(tenant.theme.logo_url);
+  const logo = mediaUrl(tenant.id, tenant.theme.logo_file);
   return html`<!doctype html>
 <html lang="${l === 'en' ? 'en' : 'pt-PT'}">
 <head>

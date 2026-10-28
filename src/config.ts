@@ -67,6 +67,18 @@ export const config = {
     timeoutMs: Number(env('IFTHENPAY_TIMEOUT_MS', '10000')),
   },
   retentionMonths: Number(env('CUSTOMER_RETENTION_MONTHS', '24')),
+  media: {
+    // 'local' keeps files under MEDIA_DIR and serves them at /media (development,
+    // tests); 's3' stores them in MEDIA_BUCKET, served by CloudFront at MEDIA_BASE_URL.
+    storage: env('MEDIA_STORAGE', isProd ? 's3' : 'local') as 'local' | 's3',
+    dir: env('MEDIA_DIR', 'data/media'),
+    bucket: env('MEDIA_BUCKET', ''),
+    region: env('AWS_REGION', 'eu-west-1'),
+    // Where browsers load images from. Local: a path on the same host.
+    baseUrl: env('MEDIA_BASE_URL', '/media').replace(/\/$/, ''),
+    maxBytes: Number(env('MEDIA_MAX_BYTES', String(5 * 1024 * 1024))),
+    maxPerTenant: Number(env('MEDIA_MAX_PER_TENANT', '200')),
+  },
 } as const;
 
 export type Config = typeof config;

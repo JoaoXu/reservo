@@ -7,6 +7,9 @@ import type { AddressInfo } from 'node:net';
 process.env.DATABASE_URL ??= 'postgres://postgres@127.0.0.1:5432/reservo_test';
 process.env.LOG_LEVEL = 'error';
 process.env.INLINE_WORKER = 'false';
+// Uploaded images go to a throwaway folder; a small limit keeps the size test cheap.
+process.env.MEDIA_DIR = (await import('node:fs')).mkdtempSync((await import('node:path')).join((await import('node:os')).tmpdir(), 'reservo-media-'));
+process.env.MEDIA_MAX_BYTES = String(100 * 1024);
 
 const { sql, closeDb } = await import('../src/db.ts');
 const { migrate } = await import('../scripts/migrate.ts');
@@ -19,8 +22,11 @@ const { zonedToUtc, addDays, localDateStr } = await import('../src/lib/time.ts')
 const { hmacSha256Hex } = await import('../src/lib/crypto.ts');
 const { applyClient, parseClientSpec } = await import('../src/domain/provision.ts');
 const { DEMO_FILE, seedDemoFile } = await import('../scripts/seed-demo.ts');
+// Client files refer to their photos relative to their own folder.
+const CLIENTS_DIR = (await import('node:path')).dirname(DEMO_FILE);
 const { readFile } = await import('node:fs/promises');
 const { request } = await import('node:http');
+const { makePng, makeJpeg } = await import('./helpers/images.ts');
 
 let base = '';
 let server: ReturnType<typeof createAppServer>;
@@ -248,6 +254,7 @@ test('admin requires login, CSRF token, and keeps studios apart', async () => {
   await sql`insert into tenants (slug, name) values ('outro', 'Outro')`;
   await sql`insert into tenant_domains (domain, tenant_id) select 'outro.localhost', id from tenants where slug = 'outro'`;
   const { request } = await import('node:http');
+const { makePng, makeJpeg } = await import('./helpers/images.ts');
   const status = await new Promise<number>((resolve, reject) => {
     const u = new URL(base);
     request({ host: '127.0.0.1', port: u.port, path: '/admin', headers: { cookie, host: 'outro.localhost' } }, (res) => { res.resume(); resolve(res.statusCode!); }).on('error', reject).end();
@@ -266,10 +273,10 @@ test('admin requires login, CSRF token, and keeps studios apart', async () => {
 interface Res { status: number; headers: Record<string, string | string[] | undefined>; text: string }
 
 /** HTTP call with an explicit Host header (fetch can't set one), as a browser on that host would. */
-function call(method: string, path: string, opts: { host?: string; cookie?: string; form?: Record<string, string> } = {}): Promise<Res> {
+function call(method: string, path: string, opts: { host?: string; cookie?: string; form?: Record<string, string>; raw?: Buffer; headers?: Record<string, string> } = {}): Promise<Res> {
   const host = opts.host ?? 'localhost';
   const port = new URL(base).port;
-  const body = opts.form ? new URLSearchParams(opts.form).toString() : undefined;
+  const body = opts.raw ?? (opts.form ? new URLSearchParams(opts.form).toString() : undefined);
   return new Promise((resolve, reject) => {
     const r = request({
       host: '127.0.0.1', port, path, method,
@@ -277,6 +284,7 @@ function call(method: string, path: string, opts: { host?: string; cookie?: stri
         host: `${host}:${port}`,
         ...(opts.cookie ? { cookie: opts.cookie } : {}),
         ...(body !== undefined ? { 'content-type': 'application/x-www-form-urlencoded', origin: `http://${host}:${port}` } : {}),
+        ...(opts.headers ?? {}),
       },
     }, (res) => {
       let text = '';
@@ -321,7 +329,7 @@ let barberPassword = '';
 
 test('client files: re-applying changes nothing, and a dry run only reports', async () => {
   const spec = parseClientSpec(JSON.parse(await readFile(DEMO_FILE, 'utf8')));
-  const again = await applyClient(spec, { extraDomains: ['localhost'] });
+  const again = await applyClient(spec, { extraDomains: ['localhost'], baseDir: CLIENTS_DIR });
   assert.deepEqual(again.changes, [], 'Maré is already exactly as its file describes');
 
   // Edit the file as a person would: new price, and the last service removed everywhere.
@@ -329,11 +337,25 @@ test('client files: re-applying changes nothing, and a dry run only reports', as
   raw.services[0].price_eur = 59;
   raw.services = raw.services.filter((x: { name_pt: string }) => x.name_pt !== 'Massagem pré-natal');
   for (const p of raw.staff) p.services = p.services.filter((n: string) => n !== 'Massagem pré-natal');
-  const plan = await applyClient(parseClientSpec(raw), { dryRun: true });
+  const plan = await applyClient(parseClientSpec(raw), { dryRun: true, baseDir: CLIENTS_DIR });
   assert.ok(plan.changes.includes('update service "Massagem de relaxamento": price_cents'), plan.changes.join('\n'));
   assert.ok(plan.changes.includes('deactivate service "Massagem pré-natal" (not in the file)'), plan.changes.join('\n'));
   const [svc] = await sql<{ price_cents: number }[]>`select price_cents from services where tenant_id = ${tenantId} and name_pt = 'Massagem de relaxamento'`;
   assert.equal(svc.price_cents, 5500, 'dry run saved nothing');
+});
+
+test('client files: photos next to the file are uploaded once, by content', async () => {
+  const [{ n: before }] = await sql<{ n: number }[]>`select count(*)::int as n from media where tenant_id = ${tenantId}`;
+  assert.ok(before >= 5, 'the demo seed uploaded Maré’s cover and gallery');
+  const spec = parseClientSpec(JSON.parse(await readFile(DEMO_FILE, 'utf8')));
+  const again = await applyClient(spec, { baseDir: CLIENTS_DIR });
+  assert.ok(!again.changes.some((c) => c.startsWith('upload')), 'same bytes, no new upload');
+  const [{ n: after }] = await sql<{ n: number }[]>`select count(*)::int as n from media where tenant_id = ${tenantId}`;
+  assert.equal(after, before);
+  const home = (await call('GET', '/')).text;
+  assert.match(home, new RegExp(`<figure class="cover"><img src="/media/t/${tenantId}/[0-9a-f]{32}\\.jpg"`));
+  assert.equal((home.match(/class="gallery-grid"/g) ?? []).length, 1);
+  await assert.rejects(applyClient({ ...spec, site: { ...spec.site, images: { ...spec.site.images, cover: 'mare/missing.jpg' } } }, { baseDir: CLIENTS_DIR }), /Image not found: mare\/missing\.jpg/);
 });
 
 test('client files: a second business gets its own site, wording and data', async () => {
@@ -442,9 +464,9 @@ test('sections can be hidden and reordered', async () => {
 
   // Back to the template: the client file wins only when asked, because an owner published since.
   const spec = parseClientSpec(JSON.parse(await readFile(DEMO_FILE, 'utf8')));
-  const kept = await applyClient(spec);
+  const kept = await applyClient(spec, { baseDir: CLIENTS_DIR });
   assert.ok(kept.warnings.some((w) => w.includes('--overwrite-site')), kept.warnings.join('\n'));
-  await applyClient(spec, { overwriteSite: true });
+  await applyClient(spec, { overwriteSite: true, baseDir: CLIENTS_DIR });
   assert.match((await call('GET', '/')).text, /id="equipa"/);
 });
 
@@ -481,7 +503,6 @@ test('the editor: unreadable colours are refused; look and lists go to the draft
   assert.match(bad.text, /value="custom" checked/, 'the rejected custom colours stay selected');
 
   assert.equal((await post('look', { template: 'studio', font: 'sans', palette: 'oceano' })).status, 303);
-  assert.equal((await post('gallery', { url_0: 'https://img.example/sala.jpg', alt_pt_0: '<b>Sala</b> "um"', url_1: 'http://img.example/insecure.jpg', alt_pt_1: 'x' })).status, 303);
   assert.equal((await post('testimonials', { quote_pt_0: '<script>alert(1)</script>', author_0: 'Eva <i>' })).status, 303);
   assert.equal((await post('faq', { q_pt_0: 'Há estacionamento?', a_pt_0: 'Sim.\n\nA dois minutos.' })).status, 303);
 
@@ -490,18 +511,103 @@ test('the editor: unreadable colours are refused; look and lists go to the draft
   assert.match(preview, /--accent:#1d6585/);
   const live = (await call('GET', '/')).text;
   assert.match(live, /tpl-classic/, 'the public site is unchanged until publishing');
-  assert.doesNotMatch(live, /img\.example/);
 
   await call('POST', '/admin/site/publish', { cookie, form: { _csrf: token } });
   const pub = (await call('GET', '/')).text;
-  assert.match(pub, /<img src="https:\/\/img\.example\/sala\.jpg" alt="&lt;b&gt;Sala&lt;\/b&gt; &quot;um&quot;" loading="lazy"/);
-  assert.doesNotMatch(pub, /insecure\.jpg/, 'http images are dropped');
   assert.match(pub, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(pub, /<script>alert/);
   assert.match(pub, /<figcaption>Eva &lt;i&gt;<\/figcaption>/);
   assert.match(pub, /<summary>Há estacionamento\?<\/summary><p>Sim\.<\/p><p>A dois minutos\.<\/p>/);
 
   // Back to the template for any later test.
-  await applyClient(parseClientSpec(JSON.parse(await readFile(DEMO_FILE, 'utf8'))), { overwriteSite: true });
+  await applyClient(parseClientSpec(JSON.parse(await readFile(DEMO_FILE, 'utf8'))), { overwriteSite: true, baseDir: CLIENTS_DIR });
   assert.match((await call('GET', '/')).text, /tpl-classic/);
+});
+
+/** Uploads an image the way the dashboard script does. */
+async function upload(host: string, cookie: string, token: string, data: Buffer, type = 'image/png'): Promise<Res> {
+  return call('POST', '/admin/media/upload', { host, cookie, raw: data, headers: { 'content-type': type, 'x-csrf-token': token, origin: `http://${host}:${new URL(base).port}`, 'x-file-name': 'sala%20de%20massagem.png' } });
+}
+
+test('photos: upload checks, use on the site, isolation between businesses, deleting', async () => {
+  const cookie = await login('localhost', 'demo@reservo.pt', 'mare-demo-2026');
+  const token = await csrf('localhost', cookie);
+
+  // Refused: no token, wrong token, not an image, a fake JPEG, too big.
+  assert.equal((await call('POST', '/admin/media/upload', { cookie, raw: makePng(4, 4), headers: { 'content-type': 'image/png', origin: base } })).status, 403);
+  assert.equal((await upload('localhost', cookie, 'nope', makePng(4, 4))).status, 403);
+  const text = await upload('localhost', cookie, token, Buffer.from('<svg onload="alert(1)"/>'), 'image/svg+xml');
+  assert.equal(text.status, 415);
+  assert.match(JSON.parse(text.text).error, /não é uma imagem/);
+  assert.equal((await upload('localhost', cookie, token, Buffer.from('not really a jpeg'), 'image/jpeg')).status, 415);
+  assert.equal((await upload('localhost', cookie, token, Buffer.alloc(101 * 1024, 1))).status, 413);
+  // Staff can't upload.
+  const staffCookie = await login('localhost', 'staff@mare.example', 'staff-pass-123');
+  const staffToken = /name="_csrf" value="([^"]+)"/.exec((await call('GET', '/admin', { cookie: staffCookie })).text)![1];
+  assert.equal((await upload('localhost', staffCookie, staffToken, makePng(4, 4))).status, 403);
+
+  const up = await upload('localhost', cookie, token, makePng(8, 6, 'GPS 38.71,-9.13'));
+  assert.equal(up.status, 201, up.text);
+  const { file, url } = JSON.parse(up.text) as { file: string; url: string };
+  assert.equal(url, `/media/t/${tenantId}/${file}`);
+  const served = await call('GET', url);
+  assert.equal(served.status, 200);
+  assert.equal(served.headers['content-type'], 'image/png');
+  assert.doesNotMatch(served.text, /GPS/, 'metadata stripped before storing');
+  const jpg = JSON.parse((await upload('localhost', cookie, token, makeJpeg(1600, 900), 'image/jpeg')).text) as { file: string };
+  assert.match((await call('GET', '/admin/media', { cookie })).text, /sala de massagem/);
+
+  // Logo and cover on the live site.
+  await call('POST', '/admin/site?s=look', { cookie, form: { _csrf: token, template: 'classic', font: 'serif', palette: 'salvia', logo_file: file, cover_file: jpg.file } });
+  await call('POST', '/admin/site/publish', { cookie, form: { _csrf: token } });
+  const home = await call('GET', '/');
+  assert.match(home.text, new RegExp(`<a class="wordmark" href="/"><img src="/media/t/${tenantId}/${file}" alt="Maré">`));
+  assert.match(home.text, new RegExp(`<figure class="cover"><img src="/media/t/${tenantId}/${jpg.file}"`));
+  assert.match(String(home.headers['content-security-policy']), /img-src 'self' data:;/, 'no more images from arbitrary https sites');
+
+  // Another business can't show, pick or delete Maré's images.
+  const barber = await login(BARBER_HOST, BARBER.owner.email, barberPassword);
+  const barberToken = await csrf(BARBER_HOST, barber);
+  await call('POST', '/admin/site?s=look', { host: BARBER_HOST, cookie: barber, form: { _csrf: barberToken, template: 'studio', palette: 'carvao', logo_file: file } });
+  await call('POST', '/admin/site/publish', { host: BARBER_HOST, cookie: barber, form: { _csrf: barberToken } });
+  assert.doesNotMatch((await call('GET', '/', { host: BARBER_HOST })).text, new RegExp(file), 'a file name from another business is ignored');
+  const [mareMedia] = await sql<{ id: string }[]>`select id from media where file = ${file}`;
+  assert.equal((await call('POST', `/admin/media/${mareMedia.id}/delete`, { host: BARBER_HOST, cookie: barber, form: { _csrf: barberToken } })).status, 404);
+  // Even a direct database write can't give another business's photo to a team member.
+  const [hugo] = await sql<{ id: string; tenant_id: string }[]>`select id, tenant_id from staff where name = 'Rui Matos'`;
+  await assert.rejects(sql`update staff set photo_file = ${file} where id = ${hugo.id}`, /staff_photo_media/);
+
+  // In use: refused with an explanation. Once replaced, it can go, file included.
+  const inUse = await call('POST', `/admin/media/${mareMedia.id}/delete`, { cookie, form: { _csrf: token } });
+  assert.equal(inUse.status, 409);
+  assert.match(inUse.text, /está a ser usada \(no site publicado\)/);
+  await call('POST', '/admin/site?s=look', { cookie, form: { _csrf: token, template: 'classic', font: 'serif', palette: 'salvia', logo_file: '', cover_file: jpg.file } });
+  await call('POST', '/admin/site/publish', { cookie, form: { _csrf: token } });
+  const del = await call('POST', `/admin/media/${mareMedia.id}/delete`, { cookie, form: { _csrf: token } });
+  assert.equal(del.status, 303);
+  assert.equal((await call('GET', url)).status, 404, 'the stored file is gone');
+});
+
+test('photos: team photos come from the library; the gallery shows chosen photos in order', async () => {
+  const cookie = await login('localhost', 'demo@reservo.pt', 'mare-demo-2026');
+  const token = await csrf('localhost', cookie);
+  const a = JSON.parse((await upload('localhost', cookie, token, makePng(10, 10))).text) as { file: string };
+  const b = JSON.parse((await upload('localhost', cookie, token, makePng(12, 10))).text) as { file: string };
+
+  const [ines] = await sql<{ id: string }[]>`select id from staff where tenant_id = ${tenantId} and name = 'Inês Carvalho'`;
+  const form = (await call('GET', `/admin/team/${ines.id}`, { cookie })).text;
+  assert.match(form, new RegExp(`name="photo_file" value="${a.file}"`));
+
+  await call('POST', '/admin/site?s=gallery', { cookie, form: {
+    _csrf: token, [`show_${a.file}`]: 'on', [`order_${a.file}`]: '2', [`alt_pt_${a.file}`]: 'Sala <grande>',
+    [`show_${b.file}`]: 'on', [`order_${b.file}`]: '1', [`alt_pt_${b.file}`]: 'Óleos',
+    show_ffffffffffffffffffffffffffffffff_jpg: 'on',
+  } });
+  await call('POST', '/admin/site/publish', { cookie, form: { _csrf: token } });
+  const home = (await call('GET', '/')).text;
+  const ia = home.indexOf(a.file), ib = home.indexOf(b.file);
+  assert.ok(ib > 0 && ia > ib, 'gallery in the chosen order');
+  assert.match(home, /alt="Sala &lt;grande&gt;"/);
+
+  await applyClient(parseClientSpec(JSON.parse(await readFile(DEMO_FILE, 'utf8'))), { overwriteSite: true, baseDir: CLIENTS_DIR });
 });

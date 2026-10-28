@@ -22,6 +22,7 @@ import { adminSlots, agenda, bookingAction, bookingDetail, bookingList, bookingP
 import { serviceForm, serviceSave, servicesPage, staffForm, staffSave, teamPage, timeOffAdd, timeOffDelete, timeOffPage } from './web/admin/catalog.ts';
 import { settingsPage, settingsSave } from './web/admin/settings.ts';
 import { siteAdminPage, siteDiscard, sitePublish, siteRestore, siteSave } from './web/admin/site.ts';
+import { localMedia, mediaDelete, mediaPage, mediaUpload, ownerUpload } from './web/admin/media.ts';
 import { customerErase, customersCsv, customersPage } from './web/admin/customers.ts';
 import { sitePage } from './web/layout.ts';
 
@@ -30,6 +31,7 @@ const platform = new Router()
   .get('/healthz', healthz)
   .get('/readyz', readyz)
   .post('/internal/cron', cron)
+  .get('/media/t/:tenant/:file', localMedia)
   .get('/hooks/ifthenpay/:tenantId', ifthenpayCallback)
   .post('/hooks/ifthenpay/:tenantId/mbway-notification', mbwayNotification);
 
@@ -77,6 +79,9 @@ const site = new Router()
   .get('/admin/time-off', a((ctx) => timeOffPage(ctx)))
   .post('/admin/time-off', a(timeOffAdd))
   .post('/admin/time-off/:id/delete', a(timeOffDelete))
+  .get('/admin/media', o((ctx) => mediaPage(ctx)))
+  .post('/admin/media/upload', ownerUpload(mediaUpload))
+  .post('/admin/media/:id/delete', o(mediaDelete))
   .get('/admin/site', o((ctx) => siteAdminPage(ctx)))
   .post('/admin/site', o(siteSave))
   .post('/admin/site/publish', o(sitePublish))

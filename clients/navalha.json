@@ -5,12 +5,25 @@
   "status": "demo",
   "default_locale": "pt",
   "timezone": "Europe/Lisbon",
-  "owner": { "email": "demo@navalha.example", "name": "Duarte Teixeira", "password": "navalha-demo-2026" },
+  "owner": {
+    "email": "demo@navalha.example",
+    "name": "Duarte Teixeira",
+    "password": "navalha-demo-2026"
+  },
   "notify_owner_email": "owner@navalha.example",
-  "booking": { "slot_interval_min": 15, "min_lead_hours": 1, "max_advance_days": 30, "cancel_window_hours": 12 },
+  "booking": {
+    "slot_interval_min": 15,
+    "min_lead_hours": 1,
+    "max_advance_days": 30,
+    "cancel_window_hours": 12
+  },
   "payments": {
-    "mode": "deposit", "deposit_percent": 20, "pay_at_studio_allowed": true,
-    "mbway_hold_min": 10, "multibanco_hold_hours": 24, "provider": "mock"
+    "mode": "deposit",
+    "deposit_percent": 20,
+    "pay_at_studio_allowed": true,
+    "mbway_hold_min": 10,
+    "multibanco_hold_hours": 24,
+    "provider": "mock"
   },
   "site": {
     "content": {
@@ -32,57 +45,247 @@
       "legal_name": "Navalha Barbearia, Lda. (demonstração)"
     },
     "template": "studio",
-    "theme": { "palette": "carvao", "font": "sans" },
+    "theme": {
+      "palette": "carvao",
+      "font": "sans",
+      "cover": "navalha/cadeiras.jpg"
+    },
     "sections": [
-      { "type": "hero", "enabled": true },
-      { "type": "services", "enabled": true },
-      { "type": "team", "enabled": true },
-      { "type": "testimonials", "enabled": true },
-      { "type": "about", "enabled": true },
-      { "type": "gallery", "enabled": true },
-      { "type": "faq", "enabled": true },
-      { "type": "visit", "enabled": true }
+      {
+        "type": "hero",
+        "enabled": true
+      },
+      {
+        "type": "services",
+        "enabled": true
+      },
+      {
+        "type": "team",
+        "enabled": true
+      },
+      {
+        "type": "testimonials",
+        "enabled": true
+      },
+      {
+        "type": "about",
+        "enabled": true
+      },
+      {
+        "type": "gallery",
+        "enabled": true
+      },
+      {
+        "type": "faq",
+        "enabled": true
+      },
+      {
+        "type": "visit",
+        "enabled": true
+      }
+    ],
+    "gallery": [
+      {
+        "image": "navalha/corte.jpg",
+        "alt_pt": "Barbeiro a fazer um degradê à máquina",
+        "alt_en": "Barber doing a clipper fade"
+      },
+      {
+        "image": "navalha/loja.jpg",
+        "alt_pt": "Interior da barbearia com cadeiras clássicas",
+        "alt_en": "Inside the shop with classic barber chairs"
+      },
+      {
+        "image": "navalha/ferramentas.jpg",
+        "alt_pt": "Máquinas, tesouras, pente e produtos",
+        "alt_en": "Clippers, scissors, comb and products"
+      },
+      {
+        "image": "navalha/tesouras.jpg",
+        "alt_pt": "Tesouras e pentes sobre uma toalha",
+        "alt_en": "Scissors and combs on a towel"
+      }
     ],
     "testimonials": [
-      { "quote_pt": "Melhor fade do Porto e nunca espero mais de cinco minutos.", "quote_en": "Best fade in Porto and I never wait more than five minutes.", "author": "Miguel, Bonfim" },
-      { "quote_pt": "A barba à navalha com toalha quente vale cada cêntimo.", "quote_en": "The hot towel straight-razor shave is worth every cent.", "author": "André, Cedofeita" },
-      { "quote_pt": "Levo o meu filho desde os quatro anos. O Tomás tem uma paciência infinita.", "quote_en": "I’ve brought my son since he was four. Tomás has endless patience.", "author": "Pedro, Massarelos" }
+      {
+        "quote_pt": "Melhor fade do Porto e nunca espero mais de cinco minutos.",
+        "quote_en": "Best fade in Porto and I never wait more than five minutes.",
+        "author": "Miguel, Bonfim"
+      },
+      {
+        "quote_pt": "A barba à navalha com toalha quente vale cada cêntimo.",
+        "quote_en": "The hot towel straight-razor shave is worth every cent.",
+        "author": "André, Cedofeita"
+      },
+      {
+        "quote_pt": "Levo o meu filho desde os quatro anos. O Tomás tem uma paciência infinita.",
+        "quote_en": "I’ve brought my son since he was four. Tomás has endless patience.",
+        "author": "Pedro, Massarelos"
+      }
     ],
     "faq": [
-      { "q_pt": "Aceitam clientes sem marcação?", "a_pt": "Sim, se houver uma cadeira livre. Com marcação online garante a hora.", "q_en": "Do you take walk-ins?", "a_en": "Yes, if a chair is free. Booking online guarantees your time." },
-      { "q_pt": "Cortam cabelo a crianças?", "a_pt": "Sim, até aos 12 anos com o corte criança. Ao sábado de manhã é a melhor altura.", "q_en": "Do you cut children’s hair?", "a_en": "Yes, up to age 12 with the kids’ cut. Saturday morning is the best time." },
-      { "q_pt": "Como pago?", "a_pt": "Pode deixar um sinal de 20% online ou pagar tudo no fim, em dinheiro, cartão ou MB WAY.", "q_en": "How do I pay?", "a_en": "Leave a 20% deposit online or pay everything at the end, in cash, by card or MB WAY." }
+      {
+        "q_pt": "Aceitam clientes sem marcação?",
+        "a_pt": "Sim, se houver uma cadeira livre. Com marcação online garante a hora.",
+        "q_en": "Do you take walk-ins?",
+        "a_en": "Yes, if a chair is free. Booking online guarantees your time."
+      },
+      {
+        "q_pt": "Cortam cabelo a crianças?",
+        "a_pt": "Sim, até aos 12 anos com o corte criança. Ao sábado de manhã é a melhor altura.",
+        "q_en": "Do you cut children’s hair?",
+        "a_en": "Yes, up to age 12 with the kids’ cut. Saturday morning is the best time."
+      },
+      {
+        "q_pt": "Como pago?",
+        "a_pt": "Pode deixar um sinal de 20% online ou pagar tudo no fim, em dinheiro, cartão ou MB WAY.",
+        "q_en": "How do I pay?",
+        "a_en": "Leave a 20% deposit online or pay everything at the end, in cash, by card or MB WAY."
+      }
     ]
   },
   "services": [
-    { "category": "Cabelo", "category_en": "Hair", "name_pt": "Corte clássico", "name_en": "Classic cut",
-      "description_pt": "Tesoura e máquina, lavagem e finalização.", "description_en": "Scissors and clippers, wash and styling.",
-      "duration_min": 30, "buffer_min": 5, "price_eur": 15 },
-    { "category": "Cabelo", "category_en": "Hair", "name_pt": "Fade", "name_en": "Fade",
-      "description_pt": "Degradê à máquina, do zero ao comprimento que quiser.", "description_en": "Clipper fade, from skin to the length you want.",
-      "duration_min": 40, "buffer_min": 5, "price_eur": 18 },
-    { "category": "Cabelo", "category_en": "Hair", "name_pt": "Corte criança", "name_en": "Kids’ cut",
-      "description_pt": "Até aos 12 anos.", "description_en": "Up to age 12.",
-      "duration_min": 25, "buffer_min": 5, "price_eur": 11 },
-    { "category": "Barba", "category_en": "Beard", "name_pt": "Barba à navalha", "name_en": "Straight-razor shave",
-      "description_pt": "Toalha quente, espuma e navalha. Termina com bálsamo.", "description_en": "Hot towel, lather and a straight razor. Finished with balm.",
-      "duration_min": 30, "buffer_min": 5, "price_eur": 13 },
-    { "category": "Barba", "category_en": "Beard", "name_pt": "Corte e barba", "name_en": "Cut and beard",
-      "description_pt": "Corte clássico e barba aparada ou à navalha.", "description_en": "Classic cut plus a beard trim or razor shave.",
-      "duration_min": 50, "buffer_min": 10, "price_eur": 24 }
+    {
+      "category": "Cabelo",
+      "category_en": "Hair",
+      "name_pt": "Corte clássico",
+      "name_en": "Classic cut",
+      "description_pt": "Tesoura e máquina, lavagem e finalização.",
+      "description_en": "Scissors and clippers, wash and styling.",
+      "duration_min": 30,
+      "buffer_min": 5,
+      "price_eur": 15
+    },
+    {
+      "category": "Cabelo",
+      "category_en": "Hair",
+      "name_pt": "Fade",
+      "name_en": "Fade",
+      "description_pt": "Degradê à máquina, do zero ao comprimento que quiser.",
+      "description_en": "Clipper fade, from skin to the length you want.",
+      "duration_min": 40,
+      "buffer_min": 5,
+      "price_eur": 18
+    },
+    {
+      "category": "Cabelo",
+      "category_en": "Hair",
+      "name_pt": "Corte criança",
+      "name_en": "Kids’ cut",
+      "description_pt": "Até aos 12 anos.",
+      "description_en": "Up to age 12.",
+      "duration_min": 25,
+      "buffer_min": 5,
+      "price_eur": 11
+    },
+    {
+      "category": "Barba",
+      "category_en": "Beard",
+      "name_pt": "Barba à navalha",
+      "name_en": "Straight-razor shave",
+      "description_pt": "Toalha quente, espuma e navalha. Termina com bálsamo.",
+      "description_en": "Hot towel, lather and a straight razor. Finished with balm.",
+      "duration_min": 30,
+      "buffer_min": 5,
+      "price_eur": 13
+    },
+    {
+      "category": "Barba",
+      "category_en": "Beard",
+      "name_pt": "Corte e barba",
+      "name_en": "Cut and beard",
+      "description_pt": "Corte clássico e barba aparada ou à navalha.",
+      "description_en": "Classic cut plus a beard trim or razor shave.",
+      "duration_min": 50,
+      "buffer_min": 10,
+      "price_eur": 24
+    }
   ],
   "staff": [
-    { "name": "Duarte Teixeira", "title_pt": "Fundador, cortes clássicos", "title_en": "Founder, classic cuts",
-      "bio_pt": "Vinte anos de tesoura, aprendeu com o avô em Braga.", "bio_en": "Twenty years with the scissors; learned from his grandfather in Braga.",
+    {
+      "name": "Duarte Teixeira",
+      "title_pt": "Fundador, cortes clássicos",
+      "title_en": "Founder, classic cuts",
+      "bio_pt": "Vinte anos de tesoura, aprendeu com o avô em Braga.",
+      "bio_en": "Twenty years with the scissors; learned from his grandfather in Braga.",
       "services": "all",
-      "hours": { "tue": ["09:30-13:00", "14:00-19:30"], "wed": ["09:30-13:00", "14:00-19:30"], "thu": ["09:30-13:00", "14:00-19:30"], "fri": ["09:30-13:00", "14:00-20:00"], "sat": ["09:00-14:00"] } },
-    { "name": "Leonel Fonseca", "title_pt": "Fades e desenhos", "title_en": "Fades and designs",
-      "bio_pt": "Campeão de fades no Porto Barber Fest 2024.", "bio_en": "Fade champion at Porto Barber Fest 2024.",
-      "services": ["Corte clássico", "Fade", "Barba à navalha", "Corte e barba"],
-      "hours": { "tue": ["11:00-20:00"], "wed": ["11:00-20:00"], "thu": ["11:00-20:00"], "fri": ["11:00-20:00"], "sat": ["09:00-14:00"] } },
-    { "name": "Tomás Rocha", "title_pt": "Cortes e crianças", "title_en": "Cuts and kids",
-      "bio_pt": "O favorito dos mais novos, e dos pais.", "bio_en": "The kids’ favourite, and their parents’.",
-      "services": ["Corte clássico", "Corte criança", "Fade"],
-      "hours": { "wed": ["09:30-18:00"], "thu": ["09:30-18:00"], "fri": ["09:30-18:00"], "sat": ["09:00-14:00"] } }
+      "hours": {
+        "tue": [
+          "09:30-13:00",
+          "14:00-19:30"
+        ],
+        "wed": [
+          "09:30-13:00",
+          "14:00-19:30"
+        ],
+        "thu": [
+          "09:30-13:00",
+          "14:00-19:30"
+        ],
+        "fri": [
+          "09:30-13:00",
+          "14:00-20:00"
+        ],
+        "sat": [
+          "09:00-14:00"
+        ]
+      }
+    },
+    {
+      "name": "Leonel Fonseca",
+      "title_pt": "Fades e desenhos",
+      "title_en": "Fades and designs",
+      "bio_pt": "Campeão de fades no Porto Barber Fest 2024.",
+      "bio_en": "Fade champion at Porto Barber Fest 2024.",
+      "services": [
+        "Corte clássico",
+        "Fade",
+        "Barba à navalha",
+        "Corte e barba"
+      ],
+      "hours": {
+        "tue": [
+          "11:00-20:00"
+        ],
+        "wed": [
+          "11:00-20:00"
+        ],
+        "thu": [
+          "11:00-20:00"
+        ],
+        "fri": [
+          "11:00-20:00"
+        ],
+        "sat": [
+          "09:00-14:00"
+        ]
+      }
+    },
+    {
+      "name": "Tomás Rocha",
+      "title_pt": "Cortes e crianças",
+      "title_en": "Cuts and kids",
+      "bio_pt": "O favorito dos mais novos, e dos pais.",
+      "bio_en": "The kids’ favourite, and their parents’.",
+      "services": [
+        "Corte clássico",
+        "Corte criança",
+        "Fade"
+      ],
+      "hours": {
+        "wed": [
+          "09:30-18:00"
+        ],
+        "thu": [
+          "09:30-18:00"
+        ],
+        "fri": [
+          "09:30-18:00"
+        ],
+        "sat": [
+          "09:00-14:00"
+        ]
+      }
+    }
   ]
 }

@@ -11,6 +11,8 @@ import {
 } from '../../domain/sites.ts';
 import { FONTS, FONT_INFO, PALETTES, TEMPLATES, TEMPLATE_INFO, contrastProblems, type Font, type Template } from '../../domain/design.ts';
 import { siteFont } from '../layout.ts';
+import { listMedia, mediaUrl, ownFiles, type Media } from '../../domain/media.ts';
+import { mediaPicker } from './media.ts';
 import { adminPage, csrfField, fieldError, flashFrom, tr } from './layout.ts';
 
 const TABS = ['texts', 'look', 'sections', 'gallery', 'testimonials', 'faq', 'history'] as const;
@@ -51,6 +53,7 @@ export async function siteAdminPage(ctx: Ctx, errors: Record<string, string> = {
   const l = ctx.locale;
   const tab = (TABS as readonly string[]).includes(ctx.query.get('s') ?? '') ? (ctx.query.get('s') as Tab) : 'texts';
   const [draft, published] = await Promise.all([draftVersion(ctx.tenant!.id), publishedVersion(ctx.tenant!.id)]);
+  const media = tab === 'look' || tab === 'gallery' ? await listMedia(ctx.tenant!.id) : [];
   // Forms show the draft if there is one, otherwise what's live.
   const t = draft ? withVersion(ctx.tenant!, draft) : ctx.tenant!;
   const c = { ...t.content, ...(values ?? {}) } as TenantContent & Record<string, string>;
@@ -122,7 +125,14 @@ export async function siteAdminPage(ctx: Ctx, errors: Record<string, string> = {
       <small>${tr(l, 'As cores personalizadas só são aceites se o texto se ler bem (contraste de pelo menos 4,5:1).', 'Custom colours are accepted only if text stays readable (contrast of at least 4.5:1).')}</small>
       ${errors.colors ? html`<span class="field-error" role="alert">${errors.colors}</span>` : ''}
     </fieldset>
-    <label>${tr(l, 'Logótipo (link https, opcional)', 'Logo (https link, optional)')}<input name="logo_url" type="url" value="${th.logo_url ?? ''}">${fieldError(errors, 'logo_url', l)}</label>
+    <fieldset><legend>${tr(l, 'Logótipo', 'Logo')}</legend>
+      <small>${tr(l, 'Aparece no topo em vez do nome. PNG com fundo transparente funciona melhor.', 'Shown at the top instead of the name. A PNG with a transparent background works best.')}</small>
+      ${mediaPicker(ctx, 'logo_file', media, th.logo_file)}
+    </fieldset>
+    <fieldset><legend>${tr(l, 'Foto de capa', 'Cover photo')}</legend>
+      <small>${tr(l, 'Uma faixa larga logo abaixo do título. Fotos na horizontal ficam melhor.', 'A wide band right below the headline. Landscape photos work best.')}</small>
+      ${mediaPicker(ctx, 'cover_file', media, th.cover_file)}
+    </fieldset>
     <button class="btn" type="submit">${tr(l, 'Guardar no rascunho', 'Save to draft')}</button>
     </form>`;
   } else if (tab === 'sections') {
@@ -141,7 +151,9 @@ export async function siteAdminPage(ctx: Ctx, errors: Record<string, string> = {
     </table>
     <button class="btn" type="submit">${tr(l, 'Guardar no rascunho', 'Save to draft')}</button>
     </form>`;
-  } else if (tab === 'gallery' || tab === 'testimonials' || tab === 'faq') {
+  } else if (tab === 'gallery') {
+    content = galleryEditor(ctx, normalizeSite(t.site), media);
+  } else if (tab === 'testimonials' || tab === 'faq') {
     content = listEditor(ctx, tab, normalizeSite(t.site));
   } else {
     const versions = await listVersions(ctx.tenant!.id);
@@ -198,7 +210,10 @@ export async function siteSave(ctx: Ctx): Promise<Reply> {
     const colours = preset
       ? { ink: preset.ink, paper: preset.paper, accent: preset.accent, soft: preset.soft }
       : { ink: hexColor(body, 'ink', errs, '#1d3a35'), paper: hexColor(body, 'paper', errs, '#eef2ee'), accent: hexColor(body, 'accent', errs, '#7a4e63'), soft: hexColor(body, 'soft', errs, '#dfe7e1') };
-    const logo_url = httpUrl(body, 'logo_url', errs) ?? '';
+    // Only this business's own library files.
+    const picked = [String(body.logo_file ?? ''), String(body.cover_file ?? '')];
+    const own = await ownFiles(ctx.tenant!.id, picked);
+    const [logo_file, cover_file] = picked.map((f) => (own.has(f) ? f : ''));
     if (!errs.ok) return siteAdminPage(ctx, errs.errors);
     const bad = contrastProblems(colours);
     if (bad.length) {
@@ -206,8 +221,17 @@ export async function siteSave(ctx: Ctx): Promise<Reply> {
       const msg = bad.map(({ rule, ratio }) => `${tr(l, rule.pt, rule.en)} ${ratio.toFixed(1).replace('.', l === 'pt' ? ',' : '.')}:1`).join('; ');
       return siteAdminPage(ctx, { colors: tr(l, `Estas cores não se leem bem: ${msg}. O mínimo é 4,5:1.`, `These colours aren’t readable enough: ${msg}. The minimum is 4.5:1.`) }, colours);
     }
-    await saveDraft(ctx.tenant!.id, (cur) => ({ ...cur, theme: { ...cur.theme, ...colours, palette: preset ? key : 'custom', font, logo_url }, site: { ...cur.site, template } }), by);
-  } else if (tab === 'gallery' || tab === 'testimonials' || tab === 'faq') {
+    await saveDraft(ctx.tenant!.id, (cur) => ({ ...cur, theme: { ...cur.theme, ...colours, palette: preset ? key : 'custom', font, logo_file, cover_file }, site: { ...cur.site, template } }), by);
+  } else if (tab === 'gallery') {
+    const media = await listMedia(ctx.tenant!.id);
+    const gallery = media
+      .map((m, i) => ({ m, i, order: Number(body[`order_${m.file}`]) || 999 }))
+      .filter(({ m }) => bool(body, `show_${m.file}`))
+      .sort((a, b) => a.order - b.order || a.i - b.i)
+      .slice(0, LIMITS.gallery)
+      .map(({ m }) => ({ file: m.file, alt_pt: String(body[`alt_pt_${m.file}`] ?? ''), alt_en: String(body[`alt_en_${m.file}`] ?? '') }));
+    await saveDraft(ctx.tenant!.id, (cur) => ({ ...cur, site: { ...cur.site, gallery } }), by);
+  } else if (tab === 'testimonials' || tab === 'faq') {
     const rows = readRows(body, tab);
     await saveDraft(ctx.tenant!.id, (cur) => ({ ...cur, site: { ...cur.site, [tab]: rows } }), by);
   } else {
@@ -240,12 +264,37 @@ export async function siteRestore(ctx: Ctx): Promise<Reply> {
   return redirect('/admin/site?s=history&ok=restored');
 }
 
-// --- List editors (gallery, testimonials, FAQ) ----------------------------------
+// --- Gallery: pick from the library ------------------------------------------------
+function galleryEditor(ctx: Ctx, site: ReturnType<typeof normalizeSite>, media: Media[]): SafeHtml {
+  const l = ctx.locale;
+  if (!media.length) return html`<p class="empty">${tr(l, 'Ainda não há fotos.', 'No photos yet.')} <a href="/admin/media">${tr(l, 'Carregar fotos', 'Upload photos')}</a></p>`;
+  const pos = new Map(site.gallery.map((g, i) => [g.file, { ...g, order: i + 1 }]));
+  // Shown ones first, in gallery order; then the rest of the library.
+  const sorted = [...media].sort((a, b) => (pos.get(a.file)?.order ?? 999) - (pos.get(b.file)?.order ?? 999));
+  return html`<form method="post" action="/admin/site?s=gallery" class="form">${csrfField(ctx)}
+    <p class="muted">${tr(l, `Escolha até ${LIMITS.gallery} fotos e a ordem. Uma descrição curta ajuda quem usa leitores de ecrã e o Google.`, `Pick up to ${LIMITS.gallery} photos and their order. A short description helps screen-reader users and Google.`)}
+      <a href="/admin/media">${tr(l, 'Carregar mais fotos', 'Upload more photos')}</a></p>
+    <ul class="gallery-pick">${sorted.map((m) => {
+      const g = pos.get(m.file);
+      return html`<li class="media-card">
+        <img src="${mediaUrl(m.tenant_id, m.file)}" alt="" loading="lazy">
+        <div class="media-meta">
+          <label class="check"><input type="checkbox" name="show_${m.file}" ${g ? 'checked' : ''}> ${tr(l, 'Mostrar', 'Show')}</label>
+          <label>${tr(l, 'Ordem', 'Order')}<input type="number" class="order-input" name="order_${m.file}" min="1" max="99" value="${g?.order ?? ''}"></label>
+          <label>${tr(l, 'Descrição (português)', 'Description (Portuguese)')}<input name="alt_pt_${m.file}" maxlength="140" value="${g?.alt_pt ?? ''}"></label>
+          <label>${tr(l, 'Descrição (inglês)', 'Description (English)')}<input name="alt_en_${m.file}" maxlength="140" value="${g?.alt_en ?? ''}"></label>
+        </div>
+      </li>`;
+    })}</ul>
+    <button class="btn" type="submit">${tr(l, 'Guardar no rascunho', 'Save to draft')}</button>
+  </form>`;
+}
+
+// --- List editors (testimonials, FAQ) ----------------------------------------------
 // Plain forms with numbered rows: existing items plus empty rows up to the
 // limit. Clearing a row removes it; normalizeSite drops incomplete rows.
 
 const LIST_FIELDS = {
-  gallery: [['url', 'Link da imagem (https)', 'Image link (https)', 500], ['alt_pt', 'Descrição (português)', 'Description (Portuguese)', 140], ['alt_en', 'Descrição (inglês)', 'Description (English)', 140]],
   testimonials: [['quote_pt', 'Testemunho (português)', 'Quote (Portuguese)', 400], ['quote_en', 'Testemunho (inglês)', 'Quote (English)', 400], ['author', 'Nome', 'Name', 60]],
   faq: [['q_pt', 'Pergunta (português)', 'Question (Portuguese)', 160], ['a_pt', 'Resposta (português)', 'Answer (Portuguese)', 800], ['q_en', 'Pergunta (inglês)', 'Question (English)', 160], ['a_en', 'Resposta (inglês)', 'Answer (English)', 800]],
 } as const;
@@ -256,7 +305,6 @@ function listEditor(ctx: Ctx, tab: ListTab, site: ReturnType<typeof normalizeSit
   const items = site[tab] as unknown as Record<string, string>[];
   const count = Math.min(LIMITS[tab], items.length + 2);
   const hint: Record<ListTab, [string, string]> = {
-    gallery: ['Fotografias do espaço e do trabalho. Por agora, links https para imagens já publicadas (por exemplo no vosso site ou Instagram); o envio de fotos chega em breve.', 'Photos of the space and the work. For now, https links to images already online; photo uploads are coming soon.'],
     testimonials: ['Frases de clientes reais, com autorização. Curtas funcionam melhor.', 'Quotes from real clients, with their permission. Short ones work best.'],
     faq: ['Respostas às perguntas que mais vos fazem (estacionamento, o que trazer, gravidez, cartões de oferta...).', 'Answers to what people ask most (parking, what to bring, pregnancy, gift cards...).'],
   };
@@ -266,7 +314,7 @@ function listEditor(ctx: Ctx, tab: ListTab, site: ReturnType<typeof normalizeSit
     ${Array.from({ length: count }, (_, i) => html`<fieldset><legend>${i + 1}</legend>
       ${LIST_FIELDS[tab].map(([f, pt, en, max]) => html`<label>${tr(l, pt, en)}${big(f)
         ? html`<textarea name="${f}_${i}" rows="2" maxlength="${max}">${items[i]?.[f] ?? ''}</textarea>`
-        : html`<input name="${f}_${i}" value="${items[i]?.[f] ?? ''}" maxlength="${max}" ${f === 'url' ? html`type="url"` : ''}>`}</label>`)}
+        : html`<input name="${f}_${i}" value="${items[i]?.[f] ?? ''}" maxlength="${max}">`}</label>`)}
     </fieldset>`)}
     <button class="btn" type="submit">${tr(l, 'Guardar no rascunho', 'Save to draft')}</button>
   </form>`;

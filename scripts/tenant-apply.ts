@@ -2,6 +2,7 @@
 // only differences are applied. Shows the changes, like a plan.
 //   npm run tenant:apply -- clients/casa-lotus.json [--dry-run] [--overwrite-site] [--domain host]...
 import { readFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { closeDb } from '../src/db.ts';
 import { isMain } from '../src/lib/main.ts';
@@ -27,7 +28,7 @@ if (isMain(import.meta.url)) {
     }
     const spec = parseClientSpec(raw);
     const dryRun = !!values['dry-run'];
-    const r = await applyClient(spec, { dryRun, overwriteSite: !!values['overwrite-site'], extraDomains: values.domain ?? [] });
+    const r = await applyClient(spec, { dryRun, overwriteSite: !!values['overwrite-site'], extraDomains: values.domain ?? [], baseDir: dirname(file) });
     console.log(`${dryRun ? 'Plan for' : 'Applied'} ${spec.name} (${spec.slug}):`);
     console.log(r.changes.length ? r.changes.map((c) => `  + ${c}`).join('\n') : '  no changes');
     for (const w of r.warnings) console.log(`  ! ${w}`);

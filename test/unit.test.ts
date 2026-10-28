@@ -9,6 +9,9 @@ import { encryptJson, decryptJson, hashPassword, verifyPassword } from '../src/l
 import { multibancoExpiryDays } from '../src/domain/payments/index.ts';
 import { LIMITS, normalizeSite, sameFields } from '../src/domain/sites.ts';
 import { PALETTES, contrast, contrastProblems } from '../src/domain/design.ts';
+import { ImageError, checkImage, sniffImage } from '../src/lib/images.ts';
+import { signRequest } from '../src/lib/sigv4.ts';
+import { makeJpeg, makePng, makeWebp } from './helpers/images.ts';
 import { SpecError, parseClientSpec } from '../src/domain/provision.ts';
 import { t, tb } from '../src/lib/i18n.ts';
 import { readFileSync } from 'node:fs';
@@ -149,15 +152,16 @@ test('site sections: known types once, services always on, missing types slot in
   assert.deepEqual(old.sections.map((x) => x.type), ['hero', 'services', 'about', 'team', 'gallery', 'testimonials', 'faq', 'visit']);
 });
 
-test('site lists: https images only, complete rows only, capped', () => {
+test('site lists: library images only, complete rows only, capped', () => {
+  const file = '0123456789abcdef0123456789abcdef.jpg';
   const s = normalizeSite({
     template: 'nope',
-    gallery: [{ url: 'http://x.example/a.jpg', alt_pt: 'a' }, { url: 'javascript:alert(1)' }, { url: 'https://x.example/b.jpg', alt_pt: '  b  ' }],
+    gallery: [{ url: 'https://x.example/a.jpg', alt_pt: 'a' }, { file: '../../etc/passwd.jpg' }, { file: 'https://x.example/b.jpg' }, { file, alt_pt: '  b  ' }],
     testimonials: [{ quote_pt: '', author: 'nobody' }, { quote_pt: 'Ótimo', author: 'Ana' }],
     faq: [{ q_pt: 'Só pergunta' }, { q_pt: 'P?', a_pt: 'R.' }, { q_en: 'Q?', a_en: 'A.' }],
   });
   assert.equal(s.template, 'classic', 'unknown template falls back');
-  assert.deepEqual(s.gallery, [{ url: 'https://x.example/b.jpg', alt_pt: 'b', alt_en: '' }]);
+  assert.deepEqual(s.gallery, [{ file, alt_pt: 'b', alt_en: '' }], 'external links and paths are dropped');
   assert.deepEqual(s.testimonials.map((q) => q.author), ['Ana']);
   assert.equal(s.faq.length, 2);
   const many = normalizeSite({ faq: Array.from({ length: 40 }, () => ({ q_pt: 'P', a_pt: 'R' })) });
@@ -214,7 +218,7 @@ test('client files: every problem is reported with where it is', () => {
     payments: { provider: 'mock' },
     site: {
       content: { whatsapp: '912 345 678', colour: 'x' }, theme: { ink: 'blue', paper: '#6f7a75' }, sections: [{ type: 'slider' }],
-      template: 'magazine', gallery: [{ url: 'http://x.example/a.jpg' }], faq: [{ q_pt: 'Só pergunta' }],
+      template: 'magazine', gallery: [{ image: '../../etc/passwd.jpg' }], faq: [{ q_pt: 'Só pergunta' }],
     },
     services: [{ name_pt: 'Corte', duration_min: 30, price_eur: 12.345 }, { name_pt: 'Corte', duration_min: 2, price_eur: 10 }],
     staff: [{ name: 'Rui', services: ['Barba'], hours: { mon: ['9-13'], funday: [] } }],
@@ -224,7 +228,46 @@ test('client files: every problem is reported with where it is', () => {
   assert.ok(err instanceof SpecError);
   const expected = ['slug:', 'business_type:', 'owner.email:', 'payments.provider:', 'site.content.whatsapp:', 'site.content.colour:',
     'site.theme.ink:', 'site.theme: text on the background has contrast', 'site.sections[0].type:', 'site.template:',
-    'site.gallery[0].url:', 'site.gallery[0].alt_pt:', 'site.faq[0].a_pt:', 'owner.password:', 'services[0].price_eur:', 'services[1].name_pt:', 'services[1].duration_min:',
+    'site.gallery[0].image:', 'site.gallery[0].alt_pt:', 'site.faq[0].a_pt:', 'owner.password:', 'services[0].price_eur:', 'services[1].name_pt:', 'services[1].duration_min:',
     'staff[0].services:', 'staff[0].hours.mon:', 'staff[0].hours.funday:'];
   for (const p of expected) assert.ok(err.problems.some((x) => x.startsWith(p)), `expected a problem for ${p}\n${err.problems.join('\n')}`);
+});
+
+test('images are identified by their bytes, measured, and stripped of metadata', () => {
+  const jpeg = checkImage(makeJpeg(640, 480));
+  assert.deepEqual([jpeg.type, jpeg.width, jpeg.height], ['image/jpeg', 640, 480]);
+  assert.ok(!jpeg.data.includes('GPSLatitude') && !jpeg.data.includes('made on a phone'), 'EXIF and comments removed');
+  assert.ok(jpeg.data.includes('JFIF'), 'JFIF header kept');
+  assert.deepEqual([...jpeg.data.subarray(-2)], [0xff, 0xd9], 'scan data and end marker kept');
+
+  const png = checkImage(makePng(3, 2, 'GPS 38.71,-9.13'));
+  assert.deepEqual([png.type, png.width, png.height], ['image/png', 3, 2]);
+  assert.ok(!png.data.includes('GPS') && png.data.includes('IDAT'));
+
+  const webp = checkImage(makeWebp(1200, 800));
+  assert.deepEqual([webp.type, webp.width, webp.height], ['image/webp', 1200, 800]);
+  assert.ok(!webp.data.includes('EXIF') && !webp.data.includes('XMP '), 'EXIF and XMP chunks removed');
+  assert.equal(webp.data.readUInt32LE(4), webp.data.length - 8, 'RIFF size matches the new length');
+  assert.equal(webp.data[20] & 0x0c, 0, 'VP8X metadata flags cleared');
+
+  for (const bad of [Buffer.from('GIF89a......'), Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'), Buffer.from('hello'), Buffer.alloc(0)]) {
+    assert.equal(sniffImage(bad), null);
+    assert.throws(() => checkImage(bad), ImageError);
+  }
+  assert.throws(() => checkImage(makePng(20_000, 1)), ImageError, 'absurd dimensions refused');
+  assert.throws(() => checkImage(makeJpeg(10, 10).subarray(0, 30)), ImageError, 'truncated file refused');
+});
+
+test('S3 request signing matches the example in the AWS documentation', () => {
+  const h = signRequest({
+    method: 'GET', url: new URL('https://examplebucket.s3.amazonaws.com/test.txt'), region: 'us-east-1', service: 's3',
+    headers: { range: 'bytes=0-9' }, payloadHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    credentials: { accessKeyId: 'AKIAIOSFODNN7EXAMPLE', secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY' },
+    now: new Date('2013-05-24T00:00:00Z'),
+  });
+  assert.equal(h.authorization, 'AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request,SignedHeaders=host;range;x-amz-content-sha256;x-amz-date,Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41');
+  const withToken = signRequest({ method: 'PUT', url: new URL('https://b.s3.eu-west-1.amazonaws.com/t/x/a.jpg'), region: 'eu-west-1', service: 's3', body: 'x',
+    credentials: { accessKeyId: 'A', secretAccessKey: 'S', sessionToken: 'TOKEN' } });
+  assert.equal(withToken['x-amz-security-token'], 'TOKEN');
+  assert.match(withToken.authorization, /SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-security-token,/);
 });

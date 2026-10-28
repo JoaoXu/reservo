@@ -21,8 +21,9 @@ export interface TenantTheme {
   paper?: string; // page background
   accent?: string; // selected states, highlights
   soft?: string; // secondary surfaces
-  logo_url?: string;
-  hero_image_url?: string;
+  /** Library file names (see domain/media.ts). */
+  logo_file?: string;
+  cover_file?: string;
   /** Preset key from design.ts PALETTES, or 'custom'. */
   palette?: string;
   font?: Font;
@@ -35,7 +36,7 @@ export type BusinessType = (typeof BUSINESS_TYPES)[number];
 export const SECTION_TYPES = ['hero', 'services', 'about', 'team', 'gallery', 'testimonials', 'faq', 'visit'] as const;
 export type SectionType = (typeof SECTION_TYPES)[number];
 
-export interface GalleryItem { url: string; alt_pt: string; alt_en: string }
+export interface GalleryItem { file: string; alt_pt: string; alt_en: string }
 export interface Testimonial { quote_pt: string; quote_en: string; author: string }
 export interface FaqItem { q_pt: string; q_en: string; a_pt: string; a_en: string }
 

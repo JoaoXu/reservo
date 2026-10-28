@@ -1,6 +1,8 @@
 output "region" { value = var.region }
 output "url" { value = local.public_base_url }
 output "demo_url" { value = local.demo_url }
+output "media_url" { value = local.media_base_url }
+output "media_bucket" { value = aws_s3_bucket.media.bucket }
 output "name_servers" {
   description = "Set these at the registrar when route53_zone is used"
   value       = local.route53 ? aws_route53_zone.main[0].name_servers : []

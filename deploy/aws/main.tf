@@ -61,6 +61,15 @@ provider "aws" {
   }
 }
 
+# CloudFront certificates must live in us-east-1.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+  default_tags {
+    tags = { Project = var.name, ManagedBy = "terraform" }
+  }
+}
+
 data "aws_caller_identity" "me" {}
 data "aws_availability_zones" "available" { state = "available" }
 

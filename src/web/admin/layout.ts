@@ -19,6 +19,7 @@ const NAV: { href: string; pt: string; en: string; icon: string }[] = [
   { href: '/admin/services', pt: 'Tratamentos', en: 'Treatments', icon: 'M6 4h12v16H6zM9 8h6M9 12h6' },
   { href: '/admin/team', pt: 'Equipa', en: 'Team', icon: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M18 15c2 .5 3 2.5 3 5' },
   { href: '/admin/site', pt: 'Site', en: 'Website', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18' },
+  { href: '/admin/media', pt: 'Fotos', en: 'Photos', icon: 'M4 6h16v13H4zM4 15l5-5 4 4 3-3 4 4M15.5 9.5h.01' },
   { href: '/admin/settings', pt: 'Definições', en: 'Settings', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4' },
 ];
 

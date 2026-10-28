@@ -115,6 +115,20 @@ export function isSecureRequest(req: IncomingMessage): boolean {
 
 const MAX_BODY = 64 * 1024;
 
+/** The raw request body, for uploads. Stops reading past the limit. */
+export async function readRaw(ctx: Ctx, limit: number): Promise<Buffer> {
+  const declared = Number(ctx.req.headers['content-length'] ?? 0);
+  if (declared > limit) throw new HttpError(413, 'File too large');
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of ctx.req) {
+    size += (chunk as Buffer).length;
+    if (size > limit) throw new HttpError(413, 'File too large');
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
 export async function readBody(ctx: Ctx, limit = MAX_BODY): Promise<Record<string, unknown>> {
   if (ctx.body) return ctx.body;
   const chunks: Buffer[] = [];
@@ -185,12 +199,15 @@ export function textReply(text: string, status = 200, headers: Record<string, st
   return { status, headers: { 'content-type': 'text/plain; charset=utf-8', ...headers }, body: text };
 }
 
+// Uploaded images come from the media CDN in production (same origin locally).
+const MEDIA_ORIGIN = /^https:\/\//.test(config.media.baseUrl) ? new URL(config.media.baseUrl).origin : '';
+
 export function securityHeaders(ctx: Ctx, secure: boolean): Record<string, string> {
   const csp = [
     "default-src 'self'",
     "script-src 'self'",
     `style-src 'self' 'nonce-${ctx.nonce}'`,
-    "img-src 'self' https: data:",
+    `img-src 'self' data:${MEDIA_ORIGIN ? ` ${MEDIA_ORIGIN}` : ''}`,
     "font-src 'self'",
     "connect-src 'self'",
     "form-action 'self' https://*.ifthenpay.com",

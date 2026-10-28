@@ -169,3 +169,19 @@ pre.copy.copied { outline: 2px solid var(--ink); }
 .swatch { display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
 .swatch i { width: 18px; height: 22px; }
 .form > .btn { justify-self: start; }
+
+/* Photos: library, upload, pickers */
+.upload { display: grid; gap: 10px; justify-items: start; margin: 8px 0 20px; }
+.upload-status { list-style: none; margin: 0; padding: 0; font-size: 0.92rem; display: grid; gap: 4px; }
+.media-grid, .gallery-pick { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.media-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: grid; }
+.media-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--soft); }
+.media-meta { display: grid; gap: 6px; padding: 10px 12px 12px; font-size: 0.9rem; }
+.media-name { font-weight: 600; overflow-wrap: anywhere; }
+.linklike.danger { color: var(--danger); }
+.picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.pick { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); cursor: pointer; display: grid; place-items: center; min-height: 72px; }
+.pick input { position: absolute; top: 6px; left: 6px; }
+.pick img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.pick-none span { font-size: 0.88rem; color: var(--ink-2); }
+.pick:has(input:checked) { border-color: var(--ink); box-shadow: 0 0 0 2px var(--ink); }

@@ -1,5 +1,6 @@
 import { sql } from '../db.ts';
 import { html, paragraphs, safeUrl, type SafeHtml } from '../lib/html.ts';
+import { mediaUrl } from '../domain/media.ts';
 import { t, tb, loc, type Locale, type MsgKey } from '../lib/i18n.ts';
 import { formatMoney, formatTime, localDateStr, addDays, minutesToHHMM } from '../lib/time.ts';
 import { htmlReply, type Ctx, type Reply } from '../http/core.ts';
@@ -57,7 +58,7 @@ function serviceRow(s: Service, l: Locale): SafeHtml {
 }
 
 function staffCard(s: Staff, l: Locale): SafeHtml {
-  const photo = safeUrl(s.photo_url);
+  const photo = mediaUrl(s.tenant_id, s.photo_file);
   const title = loc(s as unknown as Record<string, unknown>, 'title', l);
   const bio = loc(s as unknown as Record<string, unknown>, 'bio', l);
   return html`<li class="person">
@@ -88,6 +89,7 @@ export async function homePage(ctx: Ctx): Promise<Reply> {
     if (g) g.items.push(s); else groups.push({ name: s.category, label: (l === 'en' && s.category_en) || s.category, items: [s] });
   }
   const site = normalizeSite(tenant.site);
+  const cover = mediaUrl(tenant.id, tenant.theme.cover_file);
 
   const wa = whatsappLink(c.whatsapp, tb(l, kind, 'biz.whatsapp_text'));
   const tagline = loc(c as Record<string, unknown>, 'tagline', l) || tenant.name;
@@ -120,7 +122,8 @@ export async function homePage(ctx: Ctx): Promise<Reply> {
         <span class="openings-time">${formatTime(o.start, tenant.timezone, l)}</span></a></li>`)}
     </ul>` : html`<p class="muted">${t(l, 'hero.next_none')}</p>`}
   </aside>` : ''}
-</section>`,
+</section>
+${cover ? html`<figure class="cover"><img src="${cover}" alt="${tenant.name}" fetchpriority="high"></figure>` : ''}`,
 
     services: () => html`
 <section class="section" id="tratamentos" aria-labelledby="services-title">
@@ -140,7 +143,7 @@ export async function homePage(ctx: Ctx): Promise<Reply> {
 
     gallery: () => (site.gallery.length ? html`<section class="section gallery" id="galeria" aria-labelledby="gallery-title">
   <h2 class="section-title" id="gallery-title">${t(l, 'gallery.title')}</h2>
-  <ul class="gallery-grid">${site.gallery.map((g) => html`<li><img src="${safeUrl(g.url)}" alt="${loc(g as unknown as Record<string, unknown>, 'alt', l)}" loading="lazy" decoding="async"></li>`)}</ul>
+  <ul class="gallery-grid">${site.gallery.map((g) => html`<li><img src="${mediaUrl(tenant.id, g.file)}" alt="${loc(g as unknown as Record<string, unknown>, 'alt', l)}" loading="lazy" decoding="async"></li>`)}</ul>
 </section>` : ''),
 
     testimonials: () => (site.testimonials.length ? html`<section class="section quotes" aria-labelledby="quotes-title">

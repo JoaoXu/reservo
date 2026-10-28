@@ -59,6 +59,10 @@ locals {
     EMAIL_PROVIDER    = "log"
     SMS_PROVIDER      = "log"
     WHATSAPP_PROVIDER = "log"
+    MEDIA_STORAGE     = "s3"
+    MEDIA_BUCKET      = aws_s3_bucket.media.bucket
+    MEDIA_BASE_URL    = local.media_base_url
+    AWS_REGION        = var.region
   }
   container_env     = [for k, v in local.plain_env : { name = k, value = v }]
   container_secrets = [for k, s in aws_secretsmanager_secret.s : { name = k, valueFrom = s.arn }]
@@ -79,6 +83,7 @@ resource "aws_ecs_task_definition" "app" {
   cpu                      = 256
   memory                   = 512
   execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.task.arn
   # Graviton: ~20% cheaper than x86, and matches images built on Apple silicon.
   runtime_platform {
     operating_system_family = "LINUX"
@@ -111,6 +116,7 @@ resource "aws_ecs_task_definition" "migrate" {
   cpu                      = 256
   memory                   = 512
   execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.task.arn
   runtime_platform {
     operating_system_family = "LINUX"
     cpu_architecture        = "ARM64"

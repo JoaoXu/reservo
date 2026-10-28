@@ -6,7 +6,11 @@
 // the file are deactivated, never deleted: past bookings still point at them.
 // Payment keys are secrets and never live in the file; they are entered in
 // the dashboard.
+import { readFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { sql, type Tx } from '../db.ts';
+import { checkImage } from '../lib/images.ts';
+import { addMedia, hashedFileName } from './media.ts';
 import { config } from '../config.ts';
 import { hashPassword, randomToken } from '../lib/crypto.ts';
 import { BUSINESS_TYPES, SECTION_TYPES, invalidateTenantCache, type BusinessType, type SiteConfig, type TenantContent, type TenantTheme } from './tenants.ts';
@@ -26,7 +30,8 @@ export interface ServiceSpec {
 export interface StaffSpec {
   name: string;
   title_pt: string; title_en: string; bio_pt: string; bio_en: string;
-  photo_url: string | null;
+  /** Image path, relative to the client file. */
+  photo: string | null;
   /** name_pt of each service this person does. */
   services: string[];
   /** weekday (0 = Sunday) -> shifts in minutes after midnight */
@@ -48,7 +53,11 @@ export interface ClientSpec {
     payment_mode: 'none' | 'deposit' | 'full'; deposit_percent: number; pay_at_studio_allowed: boolean;
     mbway_hold_min: number; multibanco_hold_hours: number; payment_provider: 'none' | 'mock' | 'ifthenpay';
   };
-  site: { content: TenantContent; theme: TenantTheme; layout: SiteConfig };
+  site: {
+    content: TenantContent; theme: TenantTheme; layout: SiteConfig;
+    /** Image paths relative to the client file, uploaded on apply. */
+    images: { logo: string | null; cover: string | null; gallery: { path: string; alt_pt: string; alt_en: string }[] };
+  };
   services: ServiceSpec[];
   staff: StaffSpec[];
 }
@@ -119,6 +128,9 @@ class Reader {
 }
 
 const HTTPS = /^https:\/\/[^\s]+$/i;
+// A path next to the client file, e.g. "mare/sala.jpg". No absolute paths or "..".
+const IMAGE_PATH = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[\w./-]+\.(jpe?g|png|webp)$/i;
+const IMAGE_HINT = 'must be an image path next to the client file, e.g. "mare/room.jpg" (.jpg, .png or .webp)';
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HEX = /^#[0-9a-f]{6}$/i;
 const SHIFT = /^([01]\d|2[0-4]):([0-5]\d)-([01]\d|2[0-4]):([0-5]\d)$/;
@@ -202,8 +214,8 @@ export function parseClientSpec(raw: unknown): ClientSpec {
     palette: customised ? 'custom' : palette,
     font: t.font === undefined ? TEMPLATE_INFO[template].font : r.oneOf(t, 'font', 'site.theme.', FONTS),
   };
-  const logo = r.str(t, 'logo_url', 'site.theme.', { pattern: HTTPS, hint: 'must be an https link' });
-  if (logo) theme.logo_url = logo;
+  const logo = r.str(t, 'logo', 'site.theme.', { pattern: IMAGE_PATH, hint: IMAGE_HINT }) || null;
+  const cover = r.str(t, 'cover', 'site.theme.', { pattern: IMAGE_PATH, hint: IMAGE_HINT }) || null;
 
   if (s.sections !== undefined) {
     for (const [i, x] of r.arr(s, 'sections', 'site.').entries()) {
@@ -220,10 +232,13 @@ export function parseClientSpec(raw: unknown): ClientSpec {
       else check(x, `site.${key}[${i}].`);
     }
   };
+  const gallery: ClientSpec['site']['images']['gallery'] = [];
   rows('gallery', (o, at) => {
-    r.str(o, 'url', at, { required: true, pattern: HTTPS, hint: 'must be an https link' });
-    r.str(o, 'alt_pt', at, { required: true, max: 140 });
-    r.str(o, 'alt_en', at, { max: 140 });
+    gallery.push({
+      path: r.str(o, 'image', at, { required: true, pattern: IMAGE_PATH, hint: IMAGE_HINT }),
+      alt_pt: r.str(o, 'alt_pt', at, { required: true, max: 140 }),
+      alt_en: r.str(o, 'alt_en', at, { max: 140 }),
+    });
   });
   rows('testimonials', (o, at) => {
     r.str(o, 'quote_pt', at, { required: true, max: 400 });
@@ -236,7 +251,8 @@ export function parseClientSpec(raw: unknown): ClientSpec {
     r.str(o, 'q_en', at, { max: 160 });
     r.str(o, 'a_en', at, { max: 800 });
   });
-  const layout = normalizeSite({ template, sections: s.sections, gallery: s.gallery, testimonials: s.testimonials, faq: s.faq });
+  // The gallery is filled with library file names once the images are uploaded.
+  const layout = normalizeSite({ template, sections: s.sections, testimonials: s.testimonials, faq: s.faq });
 
   const services: ServiceSpec[] = r.arr(raw, 'services', '').map((x, i) => {
     const at = `services[${i}].`;
@@ -295,14 +311,14 @@ export function parseClientSpec(raw: unknown): ClientSpec {
       name: nm,
       title_pt: r.str(v, 'title_pt', at, { max: 120 }), title_en: r.str(v, 'title_en', at, { max: 120 }),
       bio_pt: r.str(v, 'bio_pt', at, { max: 600 }), bio_en: r.str(v, 'bio_en', at, { max: 600 }),
-      photo_url: r.str(v, 'photo_url', at, { pattern: HTTPS, hint: 'must be an https link' }) || null,
+      photo: r.str(v, 'photo', at, { pattern: IMAGE_PATH, hint: IMAGE_HINT }) || null,
       services: does,
       hours,
     };
   });
 
   if (r.problems.length) throw new SpecError(r.problems);
-  return { slug, name, business_type, status, default_locale, timezone, owner, notify_owner_email, booking, payments, site: { content, theme, layout }, services, staff };
+  return { slug, name, business_type, status, default_locale, timezone, owner, notify_owner_email, booking, payments, site: { content, theme, layout, images: { logo, cover, gallery } }, services, staff };
 }
 
 // --- Applying -------------------------------------------------------------------
@@ -314,6 +330,8 @@ export interface ApplyOptions {
   /** Replace the site even if the owner has published their own edits since. */
   overwriteSite?: boolean;
   dryRun?: boolean;
+  /** Directory image paths are relative to (the client file's). */
+  baseDir?: string;
 }
 
 export interface ApplyResult {
@@ -339,9 +357,10 @@ export async function applyClient(spec: ClientSpec, opts: ApplyOptions = {}): Pr
       const res: ApplyResult = { tenantId: '', created: false, changes: [], warnings: [] };
       res.tenantId = await upsertTenant(tx, spec, res);
       await ensureDomains(tx, spec, res, opts.extraDomains ?? []);
-      await applySite(tx, spec, res, !!opts.overwriteSite);
+      const files = await uploadImages(tx, spec, res, opts.baseDir ?? '.', !!opts.dryRun);
+      await applySite(tx, spec, res, !!opts.overwriteSite, files);
       const serviceIds = await applyServices(tx, spec, res);
-      await applyStaff(tx, spec, res, serviceIds);
+      await applyStaff(tx, spec, res, serviceIds, files);
       await ensureOwner(tx, spec, res, opts.ownerPassword);
       if (opts.dryRun) throw new DryRun(res);
       return res;
@@ -393,8 +412,37 @@ async function ensureDomains(tx: Tx, spec: ClientSpec, res: ApplyResult, extra: 
   }
 }
 
-async function applySite(tx: Tx, spec: ClientSpec, res: ApplyResult, overwrite: boolean): Promise<void> {
-  const fields: SiteFields = { name: spec.name, content: spec.site.content, theme: spec.site.theme, site: spec.site.layout };
+/**
+ * Uploads every image the file mentions into the business's library, named by
+ * content hash so re-applying never duplicates. Returns path -> file name.
+ */
+async function uploadImages(tx: Tx, spec: ClientSpec, res: ApplyResult, baseDir: string, dryRun: boolean): Promise<Map<string, string>> {
+  const { logo, cover, gallery } = spec.site.images;
+  const paths = [...new Set([logo, cover, ...gallery.map((g) => g.path), ...spec.staff.map((s) => s.photo)].filter((p): p is string => !!p))];
+  const files = new Map<string, string>();
+  for (const path of paths) {
+    let data: Buffer;
+    try {
+      data = await readFile(join(baseDir, path));
+    } catch {
+      throw new Error(`Image not found: ${path} (relative to ${baseDir})`);
+    }
+    const file = hashedFileName(checkImage(data));
+    const [have] = await tx`select 1 from media where tenant_id = ${res.tenantId} and file = ${file}`;
+    if (!have) {
+      res.changes.push(`upload image ${path}`);
+      if (!dryRun) await addMedia(res.tenantId, data, { name: basename(path), by: 'tenant:apply', contentHash: true, tx });
+    }
+    files.set(path, file);
+  }
+  return files;
+}
+
+async function applySite(tx: Tx, spec: ClientSpec, res: ApplyResult, overwrite: boolean, files: Map<string, string>): Promise<void> {
+  const { logo, cover, gallery } = spec.site.images;
+  const theme: TenantTheme = { ...spec.site.theme, ...(logo ? { logo_file: files.get(logo) } : {}), ...(cover ? { cover_file: files.get(cover) } : {}) };
+  const layout = { ...spec.site.layout, gallery: gallery.map((g) => ({ file: files.get(g.path)!, alt_pt: g.alt_pt, alt_en: g.alt_en })) };
+  const fields: SiteFields = { name: spec.name, content: spec.site.content, theme, site: layout };
   const current = await publishedVersion(res.tenantId, tx);
   if (current && !TOOLING.has(current.created_by) && !overwrite
     && !sameFields({ name: current.name, content: current.content, theme: current.theme, site: normalizeSite(current.site) }, { ...fields, site: normalizeSite(fields.site) })) {
@@ -437,14 +485,17 @@ async function applyServices(tx: Tx, spec: ClientSpec, res: ApplyResult): Promis
   return ids;
 }
 
-async function applyStaff(tx: Tx, spec: ClientSpec, res: ApplyResult, serviceIds: Map<string, string>): Promise<void> {
-  const rows = await tx<{ id: string; name: string; title_pt: string; title_en: string; bio_pt: string; bio_en: string; photo_url: string | null; active: boolean; sort: number }[]>`
-    select id, name, title_pt, title_en, bio_pt, bio_en, photo_url, active, sort from staff where tenant_id = ${res.tenantId}`;
+async function applyStaff(tx: Tx, spec: ClientSpec, res: ApplyResult, serviceIds: Map<string, string>, files: Map<string, string>): Promise<void> {
+  const rows = await tx<{ id: string; name: string; title_pt: string; title_en: string; bio_pt: string; bio_en: string; photo_file: string | null; active: boolean; sort: number }[]>`
+    select id, name, title_pt, title_en, bio_pt, bio_en, photo_file, active, sort from staff where tenant_id = ${res.tenantId}`;
   const byName = new Map(rows.map((s) => [s.name, s]));
   const seen = new Set<string>();
   for (const [sort, s] of spec.staff.entries()) {
     seen.add(s.name);
-    const want = { name: s.name, title_pt: s.title_pt, title_en: s.title_en, bio_pt: s.bio_pt, bio_en: s.bio_en, photo_url: s.photo_url, active: true, sort };
+    // In a dry run a new photo isn't uploaded, so it can't be linked yet (foreign key).
+    const photo = s.photo ? files.get(s.photo) ?? null : null;
+    const photoReady = !photo || (await tx`select 1 from media where tenant_id = ${res.tenantId} and file = ${photo}`).length > 0;
+    const want = { name: s.name, title_pt: s.title_pt, title_en: s.title_en, bio_pt: s.bio_pt, bio_en: s.bio_en, photo_file: photoReady ? photo : null, active: true, sort };
     let cur = byName.get(s.name);
     if (!cur) {
       [cur] = await tx<typeof rows>`insert into staff ${tx({ tenant_id: res.tenantId, ...want })} returning *`;

@@ -3,10 +3,12 @@ import { sql } from '../../db.ts';
 import { html } from '../../lib/html.ts';
 import { loc } from '../../lib/i18n.ts';
 import { formatDateLong, formatMoney, formatTime, hhmmToMinutes, isDateStr, localDateStr, minutesToHHMM, zonedToUtc } from '../../lib/time.ts';
-import { FieldErrors, bool, euros, httpUrl, int, isUuid, str, uuid } from '../../lib/validate.ts';
+import { FieldErrors, bool, euros, int, isUuid, str, uuid } from '../../lib/validate.ts';
 import { HttpError, htmlReply, readBody, redirect, type Ctx, type Reply } from '../../http/core.ts';
 import { listServices, listStaff, type Service, type Staff } from '../../domain/bookings.ts';
 import { adminPage, csrfField, fieldError, flashFrom, staffWord, tr } from './layout.ts';
+import { listMedia, ownFiles } from '../../domain/media.ts';
+import { mediaPicker } from './media.ts';
 
 // --- Treatments -------------------------------------------------------------
 export async function servicesPage(ctx: Ctx): Promise<Reply> {
@@ -146,6 +148,7 @@ export async function staffForm(ctx: Ctx, errors: Record<string, string> = {}): 
   } else {
     hours = [1, 2, 3, 4, 5].map((d) => ({ weekday: d, start_min: 600, end_min: 1140 }));
   }
+  const media = await listMedia(tenant.id);
   const days = [1, 2, 3, 4, 5, 6, 0];
   const names = l === 'en' ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] : ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
   const shift = (d: number, i: number) => hours.filter((h) => h.weekday === d)[i];
@@ -160,7 +163,7 @@ export async function staffForm(ctx: Ctx, errors: Record<string, string> = {}): 
   </div>
   <label>${tr(l, 'Apresentação (português)', 'Short bio (Portuguese)')}<textarea name="bio_pt" rows="2" maxlength="400">${s.bio_pt ?? ''}</textarea></label>
   <label>${tr(l, 'Apresentação (inglês)', 'Short bio (English)')}<textarea name="bio_en" rows="2" maxlength="400">${s.bio_en ?? ''}</textarea></label>
-  <label>${tr(l, 'Foto (link https)', 'Photo (https link)')}<input name="photo_url" type="url" value="${s.photo_url ?? ''}">${fieldError(errors, 'photo_url', l)}</label>
+  <fieldset><legend>${tr(l, 'Foto', 'Photo')}</legend>${mediaPicker(ctx, 'photo_file', media, s.photo_file)}</fieldset>
   <fieldset><legend>${tr(l, 'Horário semanal', 'Weekly hours')}</legend>
     <p class="muted">${tr(l, 'Deixe em branco os dias de folga. Use o segundo turno para pausas (ex.: 10:00–13:00 e 14:00–19:00).', 'Leave days off blank. Use the second shift for breaks (e.g. 10:00–13:00 and 14:00–19:00).')}</p>
     <table class="hours-edit"><tbody>
@@ -190,7 +193,8 @@ export async function staffSave(ctx: Ctx): Promise<Reply> {
     title_en: str(body, 'title_en', errs, { max: 80, required: false }),
     bio_pt: str(body, 'bio_pt', errs, { max: 400, required: false }),
     bio_en: str(body, 'bio_en', errs, { max: 400, required: false }),
-    photo_url: httpUrl(body, 'photo_url', errs),
+    // Only this business's own library files (the database enforces it too).
+    photo_file: (await ownFiles(tenant.id, [String(body.photo_file ?? '')])).has(String(body.photo_file)) ? String(body.photo_file) : null,
     sort: int(body, 'sort', errs, { min: -1000, max: 1000, required: false }),
     active: bool(body, 'active'),
   };

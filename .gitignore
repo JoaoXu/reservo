@@ -16,3 +16,4 @@ crash.log
 .claude/settings.local.json
 tfplan
 *.tfplan
+data/
