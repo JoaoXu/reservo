@@ -3,23 +3,35 @@
 ## Shape
 
 ```
-              studio domains (casalotus.pt, mare.reservo.pt, …)
+     business domains (mare.reservo.joaoxu.dev, later casalotus.pt, …)        media.<domain>
+                               │                                                    │
+                       load balancer / TLS                                     CloudFront
+                               │                                                    │
+            ┌──────────────────┴──────────────────┐                                 │
+            │  app (N stateless containers)        │── put/delete (task role) ──► S3 (private)
+            │  site · booking · dashboard · hooks  │──── ifthenpay API (MB WAY, Multibanco, card)
+            └──────────────────┬──────────────────┘──── Brevo (email, SMS) · Meta (WhatsApp)
                                │
-                       load balancer / TLS
-                               │
-            ┌──────────────────┴──────────────────┐
-            │  app (N stateless containers)        │──── ifthenpay API (MB WAY, Multibanco, card)
-            │  site · booking · dashboard · hooks  │──── Brevo (email, SMS) · Meta (WhatsApp)
-            └──────────────────┬──────────────────┘
-                               │
-                         PostgreSQL 16  ◄── worker or POST /internal/cron every minute
+                         PostgreSQL 16  ◄── EventBridge: POST /internal/cron every minute
 ```
+
+On AWS this is ECS Fargate behind an ALB, RDS, S3 + CloudFront and
+EventBridge, all in Terraform (`deploy/aws/`).
 
 - **Multi-tenant, one database.** Every table carries `tenant_id`. Composite
   foreign keys `(tenant_id, id)` mean a booking can only point at a therapist,
   service or customer of the same studio, enforced by the database. The studio
   is resolved from the request's Host header (custom domain, or
   `<slug>.<PLATFORM_DOMAIN>`), cached for 30 s per instance.
+- **One template system, many businesses.** A business is rows plus a client
+  file (`clients/<slug>.json`): business type (wording), template, curated
+  palette and fonts, sections, services, team, hours. Site content is
+  versioned: edits are drafts, publishing copies a version into the tenant
+  row, any earlier version can be restored.
+- **Images stay inside their business.** Files live at `t/<tenant_id>/<file>`;
+  pages store only file names and build URLs with the tenant's own id, so a
+  name copied from another business points at nothing. Team photos also have a
+  composite foreign key into the business's own media.
 - **Stateless app.** Sessions, rate limits and job locks live in Postgres, so
   you can run 1 or 50 containers with no sticky sessions or Redis.
 - **No framework.** `node:http` plus a 60-line router. One runtime dependency
@@ -39,7 +51,8 @@
   `blocked_until` includes the clean-up buffer. Two simultaneous requests for
   the same therapist and time: one commits, the other gets a constraint
   violation and either tries the next free therapist ("no preference") or
-  returns "that time was just taken".
+  returns "that time was just taken". Postgres can also report such a race as
+  a deadlock (40P01); that is retried the same way.
 - **Holds.** A booking waiting for payment holds its slot until
   `hold_expires_at` (MB WAY 10 min, card 30 min, Multibanco 24 h by default).
   Expired holds are released by the job runner, and also inside any booking
@@ -77,14 +90,16 @@
 | Clickjacking, sniffing | `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, HSTS over HTTPS. |
 | Open redirects | Redirects are only to relative paths. |
 | CSV injection | Exported cells starting with `= + - @` are neutralised. |
+| Image uploads | Owner only, CSRF token in a header plus same-origin check, 5 MB cap while reading, 200 per business. Format decided from the bytes (JPEG, PNG, WebP; never SVG or the file name), dimensions read without decoding, metadata stripped. Stored under server-generated names; served from a separate origin (CloudFront) with `nosniff`. CSP `img-src` allows only our own origin and the media origin. |
 | Secrets in logs | Logger redacts key/token/password fields; recipients are masked in the notifications table. |
 
 ## Privacy (RGPD / GDPR)
 
 - Each studio is the **controller**; you (Reservo) are the **processor**. Sign
   an art. 28 processing agreement with every studio (template to prepare with
-  a lawyer) listing sub-processors: hosting (Google Cloud or AWS, EU region),
-  Brevo, Meta (WhatsApp), ifthenpay (the studio's own processor for payments).
+  a lawyer) listing sub-processors: hosting (AWS, eu-west-1; uploaded images are
+  also cached at CloudFront edges in Europe and North America), Brevo, Meta
+  (WhatsApp), ifthenpay (the studio's own processor for payments).
 - Data minimisation: name, phone, optional email and note. Explicit privacy
   consent stored per customer; marketing consent separate and opt-in.
 - Rights: the owner can export customers (CSV) and erase a customer, which
@@ -93,6 +108,10 @@
   (default 24) are anonymised automatically.
 - Fonts are self-hosted (no Google Fonts requests) and there are no
   third-party scripts or trackers on studio sites.
+- Photos are re-encoded in the owner's browser before upload and stripped of
+  metadata again on the server, so a phone photo's GPS position (often the
+  therapist's home) never reaches the server. Deleting a photo removes the
+  file; S3 keeps a deleted version for 30 days.
 
 ## Scaling notes
 
@@ -104,4 +123,7 @@
 - Tenant cache is per instance (30 s). Settings changes show up on other
   instances within 30 s.
 - Static assets are served with ETags and immutable caching when versioned;
-  put a CDN (Cloud CDN / CloudFront) in front when traffic grows.
+  put a CDN (Cloud CDN / CloudFront) in front when traffic grows. Uploaded
+  images already go through CloudFront.
+- Images are served at upload size (at most 2000px). Thumbnails would need
+  server-side resizing (`sharp`) or an image CDN.
