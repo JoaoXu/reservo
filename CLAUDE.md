@@ -68,8 +68,12 @@ TypeScript directly: there is no build step.
   In the dashboard use `staffWord(ctx)`, never a hard-coded "Terapeuta".
 - **Businesses are set up from client files** (`clients/<slug>.json`,
   `src/domain/provision.ts`, `npm run tenant:apply`): idempotent, matched by
-  name, missing services/staff deactivated. Maré is fictional: it is the
-  template and the demo, and must always work end to end.
+  name, missing services/staff deactivated. The demos are fictional and must
+  always work end to end: Maré (massage, Classic template) and Navalha
+  (barbershop in Porto, Studio template); `npm run seed:demo` resets both.
+- **Design is curated** (`src/domain/design.ts`): templates, font pairings and
+  preset palettes. Every palette, preset or custom, must pass the contrast
+  rules (4.5:1); Studio CSS never puts accent-coloured text on ink.
 
 Map: `src/domain/` (bookings, availability, payments/ifthenpay, notify, jobs, sites, provision),
 `src/web/` (site, booking flow, hooks, admin), `src/http/` (router, sessions,
@@ -141,9 +145,11 @@ platform subdomain kept as preview/fallback; S3 access signed by hand with
    versions with draft/preview/publish/rollback, Site page in the dashboard,
    section visibility/order. Also fixed: "any therapist" bookings could fail
    with a deadlock (40P01) under concurrency; now retried.
-2. Templates and editor: 2-3 layouts sharing sections (add gallery,
-   testimonials, FAQ), curated theme (palette with contrast check, font
-   pairs), English service categories.
+2. **Done (28 Oct):** Classic and Studio templates (CSS over shared
+   sections), gallery/testimonials/FAQ sections and editors, six palettes plus
+   custom colours with a WCAG contrast check, two font pairings, English
+   service categories, the Navalha barbershop demo. Gallery takes https links
+   until uploads exist.
 3. Media: private S3 bucket + CloudFront (`media.<domain>`), uploads through
    the app (5 MB, JPEG/PNG/WebP by magic bytes), `media` table per tenant,
    tighter CSP `img-src`.

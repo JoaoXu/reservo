@@ -10,13 +10,14 @@ import { sql, type Tx } from '../db.ts';
 import { config } from '../config.ts';
 import { hashPassword, randomToken } from '../lib/crypto.ts';
 import { BUSINESS_TYPES, SECTION_TYPES, invalidateTenantCache, type BusinessType, type SiteConfig, type TenantContent, type TenantTheme } from './tenants.ts';
-import { defaultSite, draftVersion, normalizeSite, publishFields, publishedVersion, sameFields, type SiteFields } from './sites.ts';
+import { LIMITS, draftVersion, normalizeSite, publishFields, publishedVersion, sameFields, type SiteFields } from './sites.ts';
+import { DEFAULT_PALETTE, FONTS, PALETTES, TEMPLATES, TEMPLATE_INFO, contrastProblems } from './design.ts';
 
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 type Weekday = (typeof WEEKDAYS)[number];
 
 export interface ServiceSpec {
-  category: string;
+  category: string; category_en: string;
   name_pt: string; name_en: string;
   description_pt: string; description_en: string;
   duration_min: number; buffer_min: number; price_cents: number;
@@ -39,14 +40,15 @@ export interface ClientSpec {
   status: 'demo' | 'trial' | 'active' | null;
   default_locale: 'pt' | 'en';
   timezone: string;
-  owner: { email: string; name: string };
+  /** password: demo businesses only, so their login can be published. */
+  owner: { email: string; name: string; password: string | null };
   notify_owner_email: string;
   booking: { slot_interval_min: number; min_lead_min: number; max_advance_days: number; cancel_window_hours: number };
   payments: {
     payment_mode: 'none' | 'deposit' | 'full'; deposit_percent: number; pay_at_studio_allowed: boolean;
     mbway_hold_min: number; multibanco_hold_hours: number; payment_provider: 'none' | 'mock' | 'ifthenpay';
   };
-  site: { content: TenantContent; theme: TenantTheme; sections: SiteConfig['sections'] };
+  site: { content: TenantContent; theme: TenantTheme; layout: SiteConfig };
   services: ServiceSpec[];
   staff: StaffSpec[];
 }
@@ -143,7 +145,13 @@ export function parseClientSpec(raw: unknown): ClientSpec {
   try { new Intl.DateTimeFormat('en', { timeZone: timezone }); } catch { r.problems.push(`timezone: unknown time zone ${timezone}`); }
 
   const o = r.obj(raw, 'owner', '');
-  const owner = { email: r.str(o, 'email', 'owner.', { required: true, max: 120, pattern: EMAIL, hint: 'must be an email address' }).toLowerCase(), name: r.str(o, 'name', 'owner.', { required: true, max: 80 }) };
+  const owner = {
+    email: r.str(o, 'email', 'owner.', { required: true, max: 120, pattern: EMAIL, hint: 'must be an email address' }).toLowerCase(),
+    name: r.str(o, 'name', 'owner.', { required: true, max: 80 }),
+    password: r.str(o, 'password', 'owner.', { max: 100 }) || null,
+  };
+  if (owner.password && status !== 'demo') r.problems.push('owner.password: only allowed with "status": "demo" (real owners get a one-time password)');
+  if (owner.password && owner.password.length < 10) r.problems.push('owner.password: at least 10 characters');
   const notify_owner_email = r.str(raw, 'notify_owner_email', '', { max: 120, pattern: EMAIL, hint: 'must be an email address' }) || owner.email;
 
   const b = r.obj(raw, 'booking', '', false);
@@ -175,22 +183,60 @@ export function parseClientSpec(raw: unknown): ClientSpec {
     if (v) content[key] = v;
   }
   for (const k of Object.keys(c)) if (!CONTENT_FIELDS.some(([f]) => f === k)) r.problems.push(`site.content.${k}: unknown field`);
+  const template = s.template === undefined ? 'classic' : r.oneOf(s, 'template', 'site.', TEMPLATES);
   const t = r.obj(s, 'theme', 'site.', false);
-  const theme: TenantTheme = {};
+  // A preset palette, optionally with colours overridden; any custom colours must stay readable.
+  const palette = r.oneOf(t, 'palette', 'site.theme.', [...Object.keys(PALETTES), 'custom'], DEFAULT_PALETTE);
+  const base = PALETTES[palette] ?? PALETTES[DEFAULT_PALETTE];
+  const colours = { ink: base.ink, paper: base.paper, accent: base.accent, soft: base.soft };
+  let customised = false;
   for (const k of ['ink', 'paper', 'accent', 'soft'] as const) {
     const v = r.str(t, k, 'site.theme.', { pattern: HEX, hint: 'must be a colour like #1d3a35' });
-    if (v) theme[k] = v.toLowerCase();
+    if (v && HEX.test(v) && v.toLowerCase() !== colours[k]) { colours[k] = v.toLowerCase(); customised = true; }
   }
+  for (const { rule, ratio } of contrastProblems(colours)) {
+    r.problems.push(`site.theme: ${rule.en} has contrast ${ratio.toFixed(1)}:1, needs at least 4.5:1 (${rule.a} ${colours[rule.a]} vs ${rule.b} ${colours[rule.b]})`);
+  }
+  const theme: TenantTheme = {
+    ...colours,
+    palette: customised ? 'custom' : palette,
+    font: t.font === undefined ? TEMPLATE_INFO[template].font : r.oneOf(t, 'font', 'site.theme.', FONTS),
+  };
   const logo = r.str(t, 'logo_url', 'site.theme.', { pattern: HTTPS, hint: 'must be an https link' });
   if (logo) theme.logo_url = logo;
-  let sections = defaultSite().sections;
+
   if (s.sections !== undefined) {
-    const list = r.arr(s, 'sections', 'site.');
-    for (const [i, x] of list.entries()) {
+    for (const [i, x] of r.arr(s, 'sections', 'site.').entries()) {
       if (!isObj(x) || typeof x.type !== 'string' || !(SECTION_TYPES as readonly string[]).includes(x.type)) r.problems.push(`site.sections[${i}].type: must be one of ${SECTION_TYPES.join(', ')}`);
     }
-    sections = normalizeSite({ sections: list }).sections;
   }
+  // Lists: report bad rows here; normalizeSite would silently drop them.
+  const rows = (key: 'gallery' | 'testimonials' | 'faq', check: (o: Obj, at: string) => void): void => {
+    if (s[key] === undefined) return;
+    const items = r.arr(s, key, 'site.');
+    if (items.length > LIMITS[key]) r.problems.push(`site.${key}: at most ${LIMITS[key]} items`);
+    for (const [i, x] of items.entries()) {
+      if (!isObj(x)) r.problems.push(`site.${key}[${i}]: must be an object`);
+      else check(x, `site.${key}[${i}].`);
+    }
+  };
+  rows('gallery', (o, at) => {
+    r.str(o, 'url', at, { required: true, pattern: HTTPS, hint: 'must be an https link' });
+    r.str(o, 'alt_pt', at, { required: true, max: 140 });
+    r.str(o, 'alt_en', at, { max: 140 });
+  });
+  rows('testimonials', (o, at) => {
+    r.str(o, 'quote_pt', at, { required: true, max: 400 });
+    r.str(o, 'quote_en', at, { max: 400 });
+    r.str(o, 'author', at, { max: 60 });
+  });
+  rows('faq', (o, at) => {
+    r.str(o, 'q_pt', at, { required: true, max: 160 });
+    r.str(o, 'a_pt', at, { required: true, max: 800 });
+    r.str(o, 'q_en', at, { max: 160 });
+    r.str(o, 'a_en', at, { max: 800 });
+  });
+  const layout = normalizeSite({ template, sections: s.sections, gallery: s.gallery, testimonials: s.testimonials, faq: s.faq });
 
   const services: ServiceSpec[] = r.arr(raw, 'services', '').map((x, i) => {
     const at = `services[${i}].`;
@@ -201,6 +247,7 @@ export function parseClientSpec(raw: unknown): ClientSpec {
     }
     return {
       category: r.str(v, 'category', at, { max: 60 }),
+      category_en: r.str(v, 'category_en', at, { max: 60 }),
       name_pt: r.str(v, 'name_pt', at, { required: true, max: 80 }),
       name_en: r.str(v, 'name_en', at, { max: 80 }),
       description_pt: r.str(v, 'description_pt', at, { max: 400 }),
@@ -255,7 +302,7 @@ export function parseClientSpec(raw: unknown): ClientSpec {
   });
 
   if (r.problems.length) throw new SpecError(r.problems);
-  return { slug, name, business_type, status, default_locale, timezone, owner, notify_owner_email, booking, payments, site: { content, theme, sections }, services, staff };
+  return { slug, name, business_type, status, default_locale, timezone, owner, notify_owner_email, booking, payments, site: { content, theme, layout }, services, staff };
 }
 
 // --- Applying -------------------------------------------------------------------
@@ -347,7 +394,7 @@ async function ensureDomains(tx: Tx, spec: ClientSpec, res: ApplyResult, extra: 
 }
 
 async function applySite(tx: Tx, spec: ClientSpec, res: ApplyResult, overwrite: boolean): Promise<void> {
-  const fields: SiteFields = { name: spec.name, content: spec.site.content, theme: spec.site.theme, site: { template: 'classic', sections: spec.site.sections } };
+  const fields: SiteFields = { name: spec.name, content: spec.site.content, theme: spec.site.theme, site: spec.site.layout };
   const current = await publishedVersion(res.tenantId, tx);
   if (current && !TOOLING.has(current.created_by) && !overwrite
     && !sameFields({ name: current.name, content: current.content, theme: current.theme, site: normalizeSite(current.site) }, { ...fields, site: normalizeSite(fields.site) })) {
@@ -361,7 +408,7 @@ async function applySite(tx: Tx, spec: ClientSpec, res: ApplyResult, overwrite: 
 
 async function applyServices(tx: Tx, spec: ClientSpec, res: ApplyResult): Promise<Map<string, string>> {
   const rows = await tx<({ id: string; active: boolean; sort: number } & ServiceSpec)[]>`
-    select id, category, name_pt, name_en, description_pt, description_en, duration_min, buffer_min, price_cents, active, sort
+    select id, category, category_en, name_pt, name_en, description_pt, description_en, duration_min, buffer_min, price_cents, active, sort
     from services where tenant_id = ${res.tenantId}`;
   const byName = new Map(rows.map((s) => [s.name_pt, s]));
   const ids = new Map<string, string>();
@@ -445,6 +492,7 @@ async function applyStaff(tx: Tx, spec: ClientSpec, res: ApplyResult, serviceIds
 async function ensureOwner(tx: Tx, spec: ClientSpec, res: ApplyResult, password?: string): Promise<void> {
   const [u] = await tx`select 1 from users where tenant_id = ${res.tenantId} and lower(email) = ${spec.owner.email}`;
   if (u) return;
+  password ??= spec.owner.password ?? undefined;
   const pw = password ?? randomToken(12);
   await tx`insert into users (tenant_id, email, name, password_hash, role) values (${res.tenantId}, ${spec.owner.email}, ${spec.owner.name}, ${await hashPassword(pw)}, 'owner')`;
   res.changes.push(`create owner login ${spec.owner.email}`);

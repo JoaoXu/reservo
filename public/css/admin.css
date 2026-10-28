@@ -161,3 +161,11 @@ pre.copy.copied { outline: 2px solid var(--ink); }
 .site-status.draft p { margin: 0; }
 .site-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .form .order-input { width: 5em; }
+
+/* Website look: template and palette choices */
+.form .choice { align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.form .choice:has(input:checked) { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.palettes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.swatch { display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
+.swatch i { width: 18px; height: 22px; }
+.form > .btn { justify-self: start; }

@@ -5,6 +5,7 @@
 // published version without knowing about versions.
 import { sql, type Tx } from '../db.ts';
 import { SECTION_TYPES, invalidateTenantCache, type SectionType, type SiteConfig, type Tenant, type TenantContent, type TenantTheme } from './tenants.ts';
+import { TEMPLATES, type Template } from './design.ts';
 
 export interface SiteVersion {
   id: string;
@@ -29,27 +30,58 @@ export interface SiteFields {
   site: SiteConfig;
 }
 
+export const LIMITS = { gallery: 12, testimonials: 6, faq: 12 } as const;
+
 export function defaultSite(): SiteConfig {
-  return { template: 'classic', sections: SECTION_TYPES.map((type) => ({ type, enabled: true })) };
+  return { template: 'classic', sections: SECTION_TYPES.map((type) => ({ type, enabled: true })), gallery: [], testimonials: [], faq: [] };
 }
+
+type Obj = Record<string, unknown>;
+const text = (o: Obj, k: string, max: number): string => (typeof o[k] === 'string' ? (o[k] as string).trim().replace(/\u0000/g, '').slice(0, max) : '');
+const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter((x): x is Obj => !!x && typeof x === 'object') : []);
+const isHttps = (u: string): boolean => {
+  try { return new URL(u).protocol === 'https:'; } catch { return false; }
+};
 
 /**
  * Cleans a stored or submitted layout: known section types only, each once,
- * in the given order; missing types are appended (enabled) so new section
- * types show up on existing sites. Services must stay on: it's how people book.
+ * in the given order; missing types are inserted at their default position
+ * (enabled) so new section types show up on existing sites. Services must
+ * stay on: it's how people book. Lists are trimmed to their limits and rows
+ * without their required text are dropped.
  */
 export function normalizeSite(raw: unknown): SiteConfig {
-  const input = (raw && typeof raw === 'object' ? raw : {}) as { sections?: unknown };
+  const input = (raw && typeof raw === 'object' ? raw : {}) as Obj;
   const seen = new Set<SectionType>();
   const sections: SiteConfig['sections'] = [];
-  for (const s of Array.isArray(input.sections) ? input.sections : []) {
-    const type = (s as { type?: unknown })?.type;
+  for (const s of list(input.sections)) {
+    const type = s.type;
     if (typeof type !== 'string' || !(SECTION_TYPES as readonly string[]).includes(type) || seen.has(type as SectionType)) continue;
     seen.add(type as SectionType);
-    sections.push({ type: type as SectionType, enabled: type === 'services' || (s as { enabled?: unknown }).enabled !== false });
+    sections.push({ type: type as SectionType, enabled: type === 'services' || s.enabled !== false });
   }
-  for (const type of SECTION_TYPES) if (!seen.has(type)) sections.push({ type, enabled: true });
-  return { template: 'classic', sections };
+  for (const [i, type] of SECTION_TYPES.entries()) {
+    if (seen.has(type)) continue;
+    // Before the first present section that comes later in the default order.
+    const later = sections.findIndex((x) => SECTION_TYPES.indexOf(x.type) > i);
+    sections.splice(later < 0 ? sections.length : later, 0, { type, enabled: true });
+  }
+
+  const gallery = list(input.gallery)
+    .map((g) => ({ url: text(g, 'url', 500), alt_pt: text(g, 'alt_pt', 140), alt_en: text(g, 'alt_en', 140) }))
+    .filter((g) => isHttps(g.url))
+    .slice(0, LIMITS.gallery);
+  const testimonials = list(input.testimonials)
+    .map((q) => ({ quote_pt: text(q, 'quote_pt', 400), quote_en: text(q, 'quote_en', 400), author: text(q, 'author', 60) }))
+    .filter((q) => q.quote_pt || q.quote_en)
+    .slice(0, LIMITS.testimonials);
+  const faq = list(input.faq)
+    .map((f) => ({ q_pt: text(f, 'q_pt', 160), q_en: text(f, 'q_en', 160), a_pt: text(f, 'a_pt', 800), a_en: text(f, 'a_en', 800) }))
+    .filter((f) => (f.q_pt && f.a_pt) || (f.q_en && f.a_en))
+    .slice(0, LIMITS.faq);
+
+  const template = (TEMPLATES as readonly string[]).includes(input.template as string) ? (input.template as Template) : 'classic';
+  return { template, sections, gallery, testimonials, faq };
 }
 
 export function sectionEnabled(site: Partial<SiteConfig>, type: SectionType): boolean {

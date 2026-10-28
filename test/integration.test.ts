@@ -18,7 +18,7 @@ const { runJobs } = await import('../src/domain/jobs.ts');
 const { zonedToUtc, addDays, localDateStr } = await import('../src/lib/time.ts');
 const { hmacSha256Hex } = await import('../src/lib/crypto.ts');
 const { applyClient, parseClientSpec } = await import('../src/domain/provision.ts');
-const { DEMO_FILE } = await import('../scripts/seed-demo.ts');
+const { DEMO_FILE, seedDemoFile } = await import('../scripts/seed-demo.ts');
 const { readFile } = await import('node:fs/promises');
 const { request } = await import('node:http');
 
@@ -446,4 +446,62 @@ test('sections can be hidden and reordered', async () => {
   assert.ok(kept.warnings.some((w) => w.includes('--overwrite-site')), kept.warnings.join('\n'));
   await applyClient(spec, { overwriteSite: true });
   assert.match((await call('GET', '/')).text, /id="equipa"/);
+});
+
+test('templates: the barbershop demo uses Studio, Maré keeps Classic, each with its own wording', async () => {
+  const navalha = await seedDemoFile(DEMO_FILE.replace('mare.json', 'navalha.json'));
+  const host = `${navalha.slug}.localhost`;
+  const home = (await call('GET', '/', { host })).text;
+  assert.match(home, /<body class="home tpl-studio font-sans">/);
+  assert.match(home, /--accent:#7a5a12;--soft:#e3dfd5;--serif:var\(--sans\)/);
+  assert.doesNotMatch(home, /newsreader\.woff/, 'no serif font download for the sans pairing');
+  assert.match(home, /Os barbeiros/);
+  assert.match(home, /<h3 class="menu-category">Cabelo<\/h3>/);
+  assert.match(home, /<details class="faq-item"><summary>Aceitam clientes sem marcação\?<\/summary>/);
+  const en = (await call('GET', '/?lang=en', { host })).text;
+  assert.match(en, /Your barbers/);
+  assert.match(en, /<h3 class="menu-category">Hair<\/h3>/);
+  await login(host, 'demo@navalha.example', 'navalha-demo-2026');
+
+  const mare = (await call('GET', '/')).text;
+  assert.match(mare, /<body class="home tpl-classic font-serif">/);
+  assert.match(mare, /newsreader\.woff/);
+  assert.match(mare, /Quem cuida de si/);
+  assert.match((await call('GET', '/?lang=en')).text, /<h3 class="menu-category">Massages<\/h3>/);
+});
+
+test('the editor: unreadable colours are refused; look and lists go to the draft; everything is escaped', async () => {
+  const cookie = await login('localhost', 'demo@reservo.pt', 'mare-demo-2026');
+  const token = await csrf('localhost', cookie);
+  const post = (tab: string, form: Record<string, string>) => call('POST', `/admin/site?s=${tab}`, { cookie, form: { _csrf: token, ...form } });
+
+  const bad = await post('look', { template: 'classic', font: 'serif', palette: 'custom', ink: '#1d3a35', paper: '#6f7a75', accent: '#7a4e63', soft: '#dfe7e1' });
+  assert.equal(bad.status, 422);
+  assert.match(bad.text, /Estas cores não se leem bem: texto sobre o fundo 2,8:1/);
+  assert.match(bad.text, /value="custom" checked/, 'the rejected custom colours stay selected');
+
+  assert.equal((await post('look', { template: 'studio', font: 'sans', palette: 'oceano' })).status, 303);
+  assert.equal((await post('gallery', { url_0: 'https://img.example/sala.jpg', alt_pt_0: '<b>Sala</b> "um"', url_1: 'http://img.example/insecure.jpg', alt_pt_1: 'x' })).status, 303);
+  assert.equal((await post('testimonials', { quote_pt_0: '<script>alert(1)</script>', author_0: 'Eva <i>' })).status, 303);
+  assert.equal((await post('faq', { q_pt_0: 'Há estacionamento?', a_pt_0: 'Sim.\n\nA dois minutos.' })).status, 303);
+
+  const preview = (await call('GET', '/?preview=1', { cookie })).text;
+  assert.match(preview, /tpl-studio font-sans/);
+  assert.match(preview, /--accent:#1d6585/);
+  const live = (await call('GET', '/')).text;
+  assert.match(live, /tpl-classic/, 'the public site is unchanged until publishing');
+  assert.doesNotMatch(live, /img\.example/);
+
+  await call('POST', '/admin/site/publish', { cookie, form: { _csrf: token } });
+  const pub = (await call('GET', '/')).text;
+  assert.match(pub, /<img src="https:\/\/img\.example\/sala\.jpg" alt="&lt;b&gt;Sala&lt;\/b&gt; &quot;um&quot;" loading="lazy"/);
+  assert.doesNotMatch(pub, /insecure\.jpg/, 'http images are dropped');
+  assert.match(pub, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(pub, /<script>alert/);
+  assert.match(pub, /<figcaption>Eva &lt;i&gt;<\/figcaption>/);
+  assert.match(pub, /<summary>Há estacionamento\?<\/summary><p>Sim\.<\/p><p>A dois minutos\.<\/p>/);
+
+  // Back to the template for any later test.
+  await applyClient(parseClientSpec(JSON.parse(await readFile(DEMO_FILE, 'utf8'))), { overwriteSite: true });
+  assert.match((await call('GET', '/')).text, /tpl-classic/);
 });

@@ -82,11 +82,12 @@ export async function homePage(ctx: Ctx): Promise<Reply> {
   const openings = featured ? await nextOpenings(tenant, featured.id, 6, 7) : [];
 
   // Group by category, keeping the owner's order.
-  const groups: { name: string; items: Service[] }[] = [];
+  const groups: { name: string; label: string; items: Service[] }[] = [];
   for (const s of services) {
     const g = groups.find((x) => x.name === s.category);
-    if (g) g.items.push(s); else groups.push({ name: s.category, items: [s] });
+    if (g) g.items.push(s); else groups.push({ name: s.category, label: (l === 'en' && s.category_en) || s.category, items: [s] });
   }
+  const site = normalizeSite(tenant.site);
 
   const wa = whatsappLink(c.whatsapp, tb(l, kind, 'biz.whatsapp_text'));
   const tagline = loc(c as Record<string, unknown>, 'tagline', l) || tenant.name;
@@ -125,7 +126,7 @@ export async function homePage(ctx: Ctx): Promise<Reply> {
 <section class="section" id="tratamentos" aria-labelledby="services-title">
   <h2 class="section-title" id="services-title">${tb(l, kind, 'services.title')}</h2>
   ${groups.map((g) => html`<div class="menu-group">
-    ${g.name ? html`<h3 class="menu-category">${g.name}</h3>` : ''}
+    ${g.label ? html`<h3 class="menu-category">${g.label}</h3>` : ''}
     <ul class="menu">${g.items.map((s) => serviceRow(s, l))}</ul>
   </div>`)}
 </section>`,
@@ -133,9 +134,30 @@ export async function homePage(ctx: Ctx): Promise<Reply> {
     about: () => (about ? html`<section class="section about">${paragraphs(about)}</section>` : ''),
 
     team: () => (staff.length ? html`<section class="section" id="equipa" aria-labelledby="team-title">
-  <h2 class="section-title" id="team-title">${t(l, 'team.title')}</h2>
+  <h2 class="section-title" id="team-title">${tb(l, kind, 'team.title')}</h2>
   <ul class="people">${staff.map((s) => staffCard(s, l))}</ul>
 </section>` : ''),
+
+    gallery: () => (site.gallery.length ? html`<section class="section gallery" id="galeria" aria-labelledby="gallery-title">
+  <h2 class="section-title" id="gallery-title">${t(l, 'gallery.title')}</h2>
+  <ul class="gallery-grid">${site.gallery.map((g) => html`<li><img src="${safeUrl(g.url)}" alt="${loc(g as unknown as Record<string, unknown>, 'alt', l)}" loading="lazy" decoding="async"></li>`)}</ul>
+</section>` : ''),
+
+    testimonials: () => (site.testimonials.length ? html`<section class="section quotes" aria-labelledby="quotes-title">
+  <h2 class="section-title" id="quotes-title">${t(l, 'testimonials.title')}</h2>
+  <ul class="quote-list">${site.testimonials.map((q) => html`<li><figure>
+    <blockquote><p>${loc(q as unknown as Record<string, unknown>, 'quote', l)}</p></blockquote>
+    ${q.author ? html`<figcaption>${q.author}</figcaption>` : ''}
+  </figure></li>`)}</ul>
+</section>` : ''),
+
+    faq: () => {
+      const items = site.faq.map((f) => ({ q: loc(f as unknown as Record<string, unknown>, 'q', l), a: loc(f as unknown as Record<string, unknown>, 'a', l) })).filter((f) => f.q && f.a);
+      return items.length ? html`<section class="section faq" id="perguntas" aria-labelledby="faq-title">
+  <h2 class="section-title" id="faq-title">${t(l, 'faq.title')}</h2>
+  ${items.map((f) => html`<details class="faq-item"><summary>${f.q}</summary>${paragraphs(f.a)}</details>`)}
+</section>` : '';
+    },
 
     visit: () => html`
 <section class="section visit" id="visite" aria-labelledby="visit-title">
@@ -166,7 +188,7 @@ export async function homePage(ctx: Ctx): Promise<Reply> {
   </div>
 </section>`,
   };
-  const body = html`${normalizeSite(tenant.site).sections.filter((s) => s.enabled).map((s) => sections[s.type]())}`;
+  const body = html`${site.sections.filter((s) => s.enabled).map((s) => sections[s.type]())}`;
   const where = c.city ? ` | ${tb(l, kind, 'biz.category')} ${l === 'en' ? 'in' : 'em'} ${c.city}` : '';
 
   return htmlReply(sitePage(ctx, {

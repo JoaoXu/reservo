@@ -5,7 +5,9 @@
 Each business is one file, `clients/<slug>.json`: texts, colours, sections,
 services, team and hours, gathered from their Instagram, Google listing or
 price sheet. Owners rarely do this themselves, and a site with their real
-prices is what sells it. Start from `clients/mare.json` (the fictional demo).
+prices is what sells it. Start from the fictional demo closest to them:
+`clients/mare.json` (massage, Classic template) or `clients/navalha.json`
+(barbershop, Studio template).
 
 ```bash
 cp clients/mare.json clients/casa-lotus.json   # then edit it
@@ -29,14 +31,18 @@ password appears in the task output printed by `run-task.sh`.
 |---|---|
 | `slug` | Lowercase letters, digits, dashes. Becomes `<slug>.<platform domain>`. |
 | `name`, `business_type` | `massage`, `salon`, `barber` or `beauty`. The type sets the wording ("Terapeuta", "Barbeiro", "Serviços"...). |
-| `status` | `trial` (default for new), `active`, or `demo` (simulated payments; only for Maré). |
-| `owner` | `{ "email", "name" }`. Created once; an existing password is never touched. |
+| `status` | `trial` (default for new), `active`, or `demo` (simulated payments; only for the fictional demos). |
+| `owner` | `{ "email", "name" }`. Created once; an existing password is never touched. Demos only: `password`, so the demo login can be shared. |
 | `booking` | `slot_interval_min` (10/15/20/30/60), `min_lead_hours`, `max_advance_days`, `cancel_window_hours`. |
 | `payments` | `mode` (`none`/`deposit`/`full`), `deposit_percent`, `pay_at_studio_allowed`, `provider` (`none`/`ifthenpay`). Keys are never in the file: enter them in the dashboard. |
 | `site.content` | Texts in `_pt`/`_en`, address, `map_url` (https), `phone`, `whatsapp` (`+351…`), `email`, `instagram`, `legal_name`, `nif`. |
-| `site.theme` | `ink`, `paper`, `accent`, `soft` as `#rrggbb`; optional `logo_url` (https). |
-| `site.sections` | Order and visibility of `hero`, `services`, `about`, `team`, `visit`. Services can't be hidden. |
-| `services[]` | `name_pt` (the key, keep it stable), `name_en`, `category`, descriptions, `duration_min`, `buffer_min`, `price_eur`. |
+| `site.template` | `classic` (calm, serif; massage, spa, beauty) or `studio` (bold, dark; barbers, salons). |
+| `site.theme` | `palette`: `salvia`, `terracota`, `carvao`, `rosa`, `oceano`, `oliva`; any of `ink`, `paper`, `accent`, `soft` (`#rrggbb`) override it and must keep 4.5:1 contrast. `font`: `serif` or `sans` (defaults to the template's). Optional `logo_url` (https). |
+| `site.sections` | Order and visibility of `hero`, `services`, `about`, `team`, `gallery`, `testimonials`, `faq`, `visit`. Services can't be hidden; empty sections don't show. |
+| `site.gallery[]` | Up to 12 `{ "url" (https), "alt_pt", "alt_en" }`. |
+| `site.testimonials[]` | Up to 6 `{ "quote_pt", "quote_en", "author" }`. Real clients, with permission. |
+| `site.faq[]` | Up to 12 `{ "q_pt", "a_pt", "q_en", "a_en" }`. |
+| `services[]` | `name_pt` (the key, keep it stable), `name_en`, `category`, `category_en`, descriptions, `duration_min`, `buffer_min`, `price_eur`. |
 | `staff[]` | `name` (the key), titles and bios, `services` (`"all"` or a list of `name_pt`), `hours` like `{ "mon": ["10:00-13:00", "14:00-19:00"] }`. |
 
 Services and people are matched by name. Remove one from the file and it is
@@ -51,8 +57,8 @@ owner manages those themselves.
 
 ## Website edits: draft, preview, publish
 
-In the dashboard, **Site** holds the texts, look and section order. Changes go
-into a draft; **Preview** shows it on their real site to signed-in users only;
+In the dashboard, **Site** holds the texts, look (template, colours, font),
+section order, gallery, testimonials and FAQ. Changes go into a draft; **Preview** shows it on their real site to signed-in users only;
 **Publish** makes it live; **History** can restore any earlier version.
 
 ## Payments (ifthenpay)

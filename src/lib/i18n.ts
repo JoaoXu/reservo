@@ -142,6 +142,8 @@ const pt = {
   'biz.whatsapp_text': 'Olá! Gostaria de marcar um tratamento.',
   'biz.whatsapp_text@salon': 'Olá! Gostaria de marcar um horário.',
   'biz.whatsapp_text@barber': 'Olá! Gostaria de marcar um horário.',
+  'team.title@salon': 'A equipa',
+  'team.title@barber': 'Os barbeiros',
   'nav.services@salon': 'Serviços',
   'nav.services@barber': 'Serviços',
   'services.title@salon': 'Serviços',
@@ -156,6 +158,9 @@ const pt = {
   'book.step_staff@barber': 'Barbeiro',
   'book.step_staff@beauty': 'Esteticista',
   'site.preview_banner': 'Pré-visualização: alterações ainda não publicadas.',
+  'gallery.title': 'Galeria',
+  'testimonials.title': 'O que dizem os clientes',
+  'faq.title': 'Perguntas frequentes',
   'site.preview_back': 'Voltar ao painel',
 } as const;
 
@@ -295,6 +300,8 @@ const en: Record<MsgKey, string> = {
   'biz.whatsapp_text': 'Hello! I would like to book a treatment.',
   'biz.whatsapp_text@salon': 'Hello! I would like to book an appointment.',
   'biz.whatsapp_text@barber': 'Hello! I would like to book an appointment.',
+  'team.title@salon': 'The team',
+  'team.title@barber': 'Your barbers',
   'nav.services@salon': 'Services',
   'nav.services@barber': 'Services',
   'services.title@salon': 'Services',
@@ -309,6 +316,9 @@ const en: Record<MsgKey, string> = {
   'book.step_staff@barber': 'Barber',
   'book.step_staff@beauty': 'Beautician',
   'site.preview_banner': 'Preview: these changes are not published yet.',
+  'gallery.title': 'Gallery',
+  'testimonials.title': 'What clients say',
+  'faq.title': 'Questions',
   'site.preview_back': 'Back to dashboard',
 };
 

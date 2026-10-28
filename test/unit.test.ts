@@ -7,7 +7,8 @@ import { normalizePhone, FieldErrors, euros } from '../src/lib/validate.ts';
 import { amountToCents, centsToAmount, toMbwayPhone, verifyMbwayNotificationSignature, mapMbwayStatus, verifyCallbackKey } from '../src/domain/payments/ifthenpay.ts';
 import { encryptJson, decryptJson, hashPassword, verifyPassword } from '../src/lib/crypto.ts';
 import { multibancoExpiryDays } from '../src/domain/payments/index.ts';
-import { normalizeSite, sameFields } from '../src/domain/sites.ts';
+import { LIMITS, normalizeSite, sameFields } from '../src/domain/sites.ts';
+import { PALETTES, contrast, contrastProblems } from '../src/domain/design.ts';
 import { SpecError, parseClientSpec } from '../src/domain/provision.ts';
 import { t, tb } from '../src/lib/i18n.ts';
 import { readFileSync } from 'node:fs';
@@ -133,14 +134,45 @@ test('password hashing', async () => {
   assert.ok(!(await verifyPassword('wrong', h)));
 });
 
-test('site sections: known types once, services always on, new types appended', () => {
+test('site sections: known types once, services always on, missing types slot in at their default place', () => {
   const s = normalizeSite({ sections: [
     { type: 'visit', enabled: true }, { type: 'services', enabled: false }, { type: 'bogus' }, { type: 'visit', enabled: false }, { type: 'team', enabled: false },
   ] });
-  assert.deepEqual(s.sections.map((x) => x.type), ['visit', 'services', 'team', 'hero', 'about']);
+  // Each missing type goes before the first present section that comes later by default (here: visit).
+  assert.deepEqual(s.sections.map((x) => x.type), ['hero', 'about', 'gallery', 'testimonials', 'faq', 'visit', 'services', 'team']);
   assert.equal(s.sections.find((x) => x.type === 'services')!.enabled, true, 'services cannot be hidden');
   assert.equal(s.sections.find((x) => x.type === 'team')!.enabled, false);
-  assert.deepEqual(normalizeSite(null).sections.map((x) => x.enabled), [true, true, true, true, true]);
+  assert.ok(normalizeSite(null).sections.every((x) => x.enabled));
+
+  // A site saved before gallery/testimonials/faq existed gets them before "visit".
+  const old = normalizeSite({ sections: ['hero', 'services', 'about', 'team', 'visit'].map((type) => ({ type, enabled: true })) });
+  assert.deepEqual(old.sections.map((x) => x.type), ['hero', 'services', 'about', 'team', 'gallery', 'testimonials', 'faq', 'visit']);
+});
+
+test('site lists: https images only, complete rows only, capped', () => {
+  const s = normalizeSite({
+    template: 'nope',
+    gallery: [{ url: 'http://x.example/a.jpg', alt_pt: 'a' }, { url: 'javascript:alert(1)' }, { url: 'https://x.example/b.jpg', alt_pt: '  b  ' }],
+    testimonials: [{ quote_pt: '', author: 'nobody' }, { quote_pt: 'Ótimo', author: 'Ana' }],
+    faq: [{ q_pt: 'Só pergunta' }, { q_pt: 'P?', a_pt: 'R.' }, { q_en: 'Q?', a_en: 'A.' }],
+  });
+  assert.equal(s.template, 'classic', 'unknown template falls back');
+  assert.deepEqual(s.gallery, [{ url: 'https://x.example/b.jpg', alt_pt: 'b', alt_en: '' }]);
+  assert.deepEqual(s.testimonials.map((q) => q.author), ['Ana']);
+  assert.equal(s.faq.length, 2);
+  const many = normalizeSite({ faq: Array.from({ length: 40 }, () => ({ q_pt: 'P', a_pt: 'R' })) });
+  assert.equal(many.faq.length, LIMITS.faq);
+});
+
+test('colour contrast follows WCAG, and every preset palette is readable', () => {
+  assert.equal(Math.round(contrast('#000000', '#ffffff')), 21);
+  assert.equal(contrast('#777777', '#ffffff').toFixed(2), '4.48');
+  for (const [k, p] of Object.entries(PALETTES)) {
+    assert.deepEqual(contrastProblems(p), [], `palette ${k}`);
+    assert.ok(contrast('#ffffff', p.accent) >= 4.5, `white on accent, palette ${k}`); // selected time slots
+  }
+  const bad = contrastProblems({ ink: '#1d3a35', paper: '#6f7a75', accent: '#7a4e63', soft: '#dfe7e1' });
+  assert.deepEqual(bad.map((b) => `${b.rule.a}/${b.rule.b}`), ['ink/paper', 'accent/paper']);
 });
 
 test('site versions compare by content, ignoring key order and empty fields', () => {
@@ -166,12 +198,24 @@ test('client files: the Maré template is valid', () => {
   assert.ok(!ines.services.includes('Massagem pré-natal'));
 });
 
+test('client files: the Navalha barbershop demo is valid and uses the studio template', () => {
+  const spec = parseClientSpec(JSON.parse(readFileSync(join(import.meta.dirname, '..', 'clients', 'navalha.json'), 'utf8')));
+  assert.equal(spec.business_type, 'barber');
+  assert.equal(spec.site.layout.template, 'studio');
+  assert.deepEqual([spec.site.theme.palette, spec.site.theme.font, spec.site.theme.accent], ['carvao', 'sans', PALETTES.carvao.accent]);
+  assert.equal(spec.owner.password, 'navalha-demo-2026');
+  assert.ok(spec.services.every((s) => s.category_en));
+});
+
 test('client files: every problem is reported with where it is', () => {
   const bad = {
     slug: 'Casa Lotus', name: 'Casa', business_type: 'spa', status: 'active',
-    owner: { email: 'nope', name: 'Ana' },
+    owner: { email: 'nope', name: 'Ana', password: 'secret-password-1' },
     payments: { provider: 'mock' },
-    site: { content: { whatsapp: '912 345 678', colour: 'x' }, theme: { ink: 'blue' }, sections: [{ type: 'gallery' }] },
+    site: {
+      content: { whatsapp: '912 345 678', colour: 'x' }, theme: { ink: 'blue', paper: '#6f7a75' }, sections: [{ type: 'slider' }],
+      template: 'magazine', gallery: [{ url: 'http://x.example/a.jpg' }], faq: [{ q_pt: 'Só pergunta' }],
+    },
     services: [{ name_pt: 'Corte', duration_min: 30, price_eur: 12.345 }, { name_pt: 'Corte', duration_min: 2, price_eur: 10 }],
     staff: [{ name: 'Rui', services: ['Barba'], hours: { mon: ['9-13'], funday: [] } }],
   };
@@ -179,7 +223,8 @@ test('client files: every problem is reported with where it is', () => {
   try { parseClientSpec(bad); } catch (e) { err = e as SpecError; }
   assert.ok(err instanceof SpecError);
   const expected = ['slug:', 'business_type:', 'owner.email:', 'payments.provider:', 'site.content.whatsapp:', 'site.content.colour:',
-    'site.theme.ink:', 'site.sections[0].type:', 'services[0].price_eur:', 'services[1].name_pt:', 'services[1].duration_min:',
+    'site.theme.ink:', 'site.theme: text on the background has contrast', 'site.sections[0].type:', 'site.template:',
+    'site.gallery[0].url:', 'site.gallery[0].alt_pt:', 'site.faq[0].a_pt:', 'owner.password:', 'services[0].price_eur:', 'services[1].name_pt:', 'services[1].duration_min:',
     'staff[0].services:', 'staff[0].hours.mon:', 'staff[0].hours.funday:'];
   for (const p of expected) assert.ok(err.problems.some((x) => x.startsWith(p)), `expected a problem for ${p}\n${err.problems.join('\n')}`);
 });

@@ -5,12 +5,25 @@
   "status": "demo",
   "default_locale": "pt",
   "timezone": "Europe/Lisbon",
-  "owner": { "email": "demo@reservo.pt", "name": "Teresa Lobo" },
+  "owner": {
+    "email": "demo@reservo.pt",
+    "name": "Teresa Lobo",
+    "password": "mare-demo-2026"
+  },
   "notify_owner_email": "owner@mare.example",
-  "booking": { "slot_interval_min": 15, "min_lead_hours": 2, "max_advance_days": 60, "cancel_window_hours": 24 },
+  "booking": {
+    "slot_interval_min": 15,
+    "min_lead_hours": 2,
+    "max_advance_days": 60,
+    "cancel_window_hours": 24
+  },
   "payments": {
-    "mode": "deposit", "deposit_percent": 30, "pay_at_studio_allowed": true,
-    "mbway_hold_min": 10, "multibanco_hold_hours": 24, "provider": "mock"
+    "mode": "deposit",
+    "deposit_percent": 30,
+    "pay_at_studio_allowed": true,
+    "mbway_hold_min": 10,
+    "multibanco_hold_hours": 24,
+    "provider": "mock"
   },
   "site": {
     "content": {
@@ -31,63 +44,265 @@
       "hours_note_en": "Public holidays: check online availability.",
       "legal_name": "Maré Bem-Estar, Lda. (demonstração)"
     },
-    "theme": { "ink": "#1d3a35", "paper": "#eef2ee", "accent": "#7a4e63", "soft": "#dfe7e1" },
+    "template": "classic",
+    "theme": {
+      "palette": "salvia",
+      "font": "serif"
+    },
     "sections": [
-      { "type": "hero", "enabled": true },
-      { "type": "services", "enabled": true },
-      { "type": "about", "enabled": true },
-      { "type": "team", "enabled": true },
-      { "type": "visit", "enabled": true }
+      {
+        "type": "hero",
+        "enabled": true
+      },
+      {
+        "type": "services",
+        "enabled": true
+      },
+      {
+        "type": "about",
+        "enabled": true
+      },
+      {
+        "type": "team",
+        "enabled": true
+      },
+      {
+        "type": "gallery",
+        "enabled": true
+      },
+      {
+        "type": "testimonials",
+        "enabled": true
+      },
+      {
+        "type": "faq",
+        "enabled": true
+      },
+      {
+        "type": "visit",
+        "enabled": true
+      }
+    ],
+    "testimonials": [
+      {
+        "quote_pt": "Saí de lá a sentir os ombros pela primeira vez em meses. A Inês percebeu logo onde estava o problema.",
+        "quote_en": "I walked out feeling my shoulders for the first time in months. Inês found the problem straight away.",
+        "author": "Rita, Graça"
+      },
+      {
+        "quote_pt": "Marquei às 23h no telemóvel, paguei o sinal por MB WAY e no dia seguinte estava na marquesa.",
+        "quote_en": "Booked at 11pm on my phone, paid the deposit with MB WAY, and was on the table the next day.",
+        "author": "Daniel, Lisboa"
+      },
+      {
+        "quote_pt": "A massagem pré-natal com a Mariana foi a melhor hora da minha gravidez.",
+        "quote_en": "The pregnancy massage with Mariana was the best hour of my pregnancy.",
+        "author": "Joana, Alfama"
+      }
+    ],
+    "faq": [
+      {
+        "q_pt": "Preciso de levar alguma coisa?",
+        "a_pt": "Não. Temos toalhas, roupão e chinelos. Chegue cinco minutos antes para preencher uma ficha curta.",
+        "q_en": "Do I need to bring anything?",
+        "a_en": "No. We have towels, a robe and slippers. Arrive five minutes early to fill in a short form."
+      },
+      {
+        "q_pt": "Posso fazer massagem grávida?",
+        "a_pt": "Sim, a partir das 14 semanas, com a massagem pré-natal. Diga-nos na marcação de quantas semanas está.",
+        "q_en": "Can I have a massage while pregnant?",
+        "a_en": "Yes, from 14 weeks, with the pregnancy massage. Tell us how many weeks you are when you book."
+      },
+      {
+        "q_pt": "Como funciona o sinal?",
+        "a_pt": "Paga 30% ao marcar (MB WAY, Multibanco ou cartão) e o resto no dia. Se cancelar até 24 horas antes, devolvemos o sinal.",
+        "q_en": "How does the deposit work?",
+        "a_en": "You pay 30% when you book (MB WAY, Multibanco or card) and the rest on the day. Cancel up to 24 hours before and we refund it."
+      },
+      {
+        "q_pt": "Há estacionamento perto?",
+        "a_pt": "O mais perto é o parque do Largo do Chafariz de Dentro, a três minutos a pé. O elétrico 28 pára na Rua das Escolas Gerais.",
+        "q_en": "Is there parking nearby?",
+        "a_en": "The closest is the car park at Largo do Chafariz de Dentro, three minutes on foot. Tram 28 stops at Rua das Escolas Gerais."
+      }
     ]
   },
   "services": [
-    { "category": "Massagens", "name_pt": "Massagem de relaxamento", "name_en": "Relaxing massage",
+    {
+      "category": "Massagens",
+      "name_pt": "Massagem de relaxamento",
+      "name_en": "Relaxing massage",
       "description_pt": "Movimentos lentos e envolventes, com óleo morno. Para desligar a cabeça.",
       "description_en": "Slow, enveloping strokes with warm oil. For switching your head off.",
-      "duration_min": 60, "buffer_min": 15, "price_eur": 55 },
-    { "category": "Massagens", "name_pt": "Massagem de relaxamento longa", "name_en": "Long relaxing massage",
+      "duration_min": 60,
+      "buffer_min": 15,
+      "price_eur": 55,
+      "category_en": "Massages"
+    },
+    {
+      "category": "Massagens",
+      "name_pt": "Massagem de relaxamento longa",
+      "name_en": "Long relaxing massage",
       "description_pt": "A mesma, com tempo para pés, mãos e couro cabeludo.",
       "description_en": "The same, with time for feet, hands and scalp.",
-      "duration_min": 90, "buffer_min": 15, "price_eur": 75 },
-    { "category": "Massagens", "name_pt": "Tecidos profundos", "name_en": "Deep tissue",
+      "duration_min": 90,
+      "buffer_min": 15,
+      "price_eur": 75,
+      "category_en": "Massages"
+    },
+    {
+      "category": "Massagens",
+      "name_pt": "Tecidos profundos",
+      "name_en": "Deep tissue",
       "description_pt": "Pressão firme em costas, pescoço e ombros. Boa para quem passa o dia ao computador.",
       "description_en": "Firm pressure on back, neck and shoulders. Good if you spend the day at a desk.",
-      "duration_min": 60, "buffer_min": 15, "price_eur": 65 },
-    { "category": "Massagens", "name_pt": "Pedras quentes", "name_en": "Hot stones",
+      "duration_min": 60,
+      "buffer_min": 15,
+      "price_eur": 65,
+      "category_en": "Massages"
+    },
+    {
+      "category": "Massagens",
+      "name_pt": "Pedras quentes",
+      "name_en": "Hot stones",
       "description_pt": "Basalto aquecido que solta os músculos antes das mãos.",
       "description_en": "Heated basalt that loosens muscles before the hands do.",
-      "duration_min": 75, "buffer_min": 20, "price_eur": 78 },
-    { "category": "Terapias", "name_pt": "Drenagem linfática manual", "name_en": "Manual lymphatic drainage",
+      "duration_min": 75,
+      "buffer_min": 20,
+      "price_eur": 78,
+      "category_en": "Massages"
+    },
+    {
+      "category": "Terapias",
+      "name_pt": "Drenagem linfática manual",
+      "name_en": "Manual lymphatic drainage",
       "description_pt": "Método Vodder, suave e ritmado. Indicada para pernas pesadas e pós-voo.",
       "description_en": "Vodder method, gentle and rhythmic. For heavy legs and after long flights.",
-      "duration_min": 60, "buffer_min": 15, "price_eur": 60 },
-    { "category": "Terapias", "name_pt": "Reflexologia podal", "name_en": "Foot reflexology",
+      "duration_min": 60,
+      "buffer_min": 15,
+      "price_eur": 60,
+      "category_en": "Therapies"
+    },
+    {
+      "category": "Terapias",
+      "name_pt": "Reflexologia podal",
+      "name_en": "Foot reflexology",
       "description_pt": "Pressão em pontos dos pés, sentado e vestido.",
       "description_en": "Pressure on points of the feet, seated and fully clothed.",
-      "duration_min": 45, "buffer_min": 10, "price_eur": 40 },
-    { "category": "Terapias", "name_pt": "Massagem pré-natal", "name_en": "Pregnancy massage",
+      "duration_min": 45,
+      "buffer_min": 10,
+      "price_eur": 40,
+      "category_en": "Therapies"
+    },
+    {
+      "category": "Terapias",
+      "name_pt": "Massagem pré-natal",
+      "name_en": "Pregnancy massage",
       "description_pt": "De lado, com almofadas, a partir das 14 semanas.",
       "description_en": "Side-lying with cushions, from 14 weeks.",
-      "duration_min": 60, "buffer_min": 15, "price_eur": 60 }
+      "duration_min": 60,
+      "buffer_min": 15,
+      "price_eur": 60,
+      "category_en": "Therapies"
+    }
   ],
   "staff": [
-    { "name": "Inês Carvalho",
-      "title_pt": "Massagem desportiva e tecidos profundos", "title_en": "Sports and deep tissue massage",
+    {
+      "name": "Inês Carvalho",
+      "title_pt": "Massagem desportiva e tecidos profundos",
+      "title_en": "Sports and deep tissue massage",
       "bio_pt": "Fisioterapeuta de formação, doze anos de experiência com atletas.",
       "bio_en": "Trained physiotherapist, twelve years working with athletes.",
-      "services": ["Massagem de relaxamento", "Massagem de relaxamento longa", "Tecidos profundos", "Pedras quentes", "Drenagem linfática manual", "Reflexologia podal"],
-      "hours": { "mon": ["10:00-13:00", "14:00-19:00"], "tue": ["10:00-13:00", "14:00-19:00"], "wed": ["10:00-13:00", "14:00-19:00"], "thu": ["12:00-20:00"], "fri": ["10:00-18:00"] } },
-    { "name": "Rafael Monteiro",
-      "title_pt": "Relaxamento e pedras quentes", "title_en": "Relaxation and hot stones",
+      "services": [
+        "Massagem de relaxamento",
+        "Massagem de relaxamento longa",
+        "Tecidos profundos",
+        "Pedras quentes",
+        "Drenagem linfática manual",
+        "Reflexologia podal"
+      ],
+      "hours": {
+        "mon": [
+          "10:00-13:00",
+          "14:00-19:00"
+        ],
+        "tue": [
+          "10:00-13:00",
+          "14:00-19:00"
+        ],
+        "wed": [
+          "10:00-13:00",
+          "14:00-19:00"
+        ],
+        "thu": [
+          "12:00-20:00"
+        ],
+        "fri": [
+          "10:00-18:00"
+        ]
+      }
+    },
+    {
+      "name": "Rafael Monteiro",
+      "title_pt": "Relaxamento e pedras quentes",
+      "title_en": "Relaxation and hot stones",
       "bio_pt": "Aprendeu em Chiang Mai e trouxe o ritmo lento para Alfama.",
       "bio_en": "Trained in Chiang Mai and brought the slow pace to Alfama.",
-      "services": ["Massagem de relaxamento", "Massagem de relaxamento longa", "Tecidos profundos", "Pedras quentes", "Reflexologia podal"],
-      "hours": { "tue": ["12:00-20:00"], "wed": ["12:00-20:00"], "thu": ["10:00-18:00"], "fri": ["12:00-20:00"], "sat": ["10:00-18:00"] } },
-    { "name": "Mariana Sousa",
-      "title_pt": "Drenagem linfática e pré-natal", "title_en": "Lymphatic drainage and pregnancy",
+      "services": [
+        "Massagem de relaxamento",
+        "Massagem de relaxamento longa",
+        "Tecidos profundos",
+        "Pedras quentes",
+        "Reflexologia podal"
+      ],
+      "hours": {
+        "tue": [
+          "12:00-20:00"
+        ],
+        "wed": [
+          "12:00-20:00"
+        ],
+        "thu": [
+          "10:00-18:00"
+        ],
+        "fri": [
+          "12:00-20:00"
+        ],
+        "sat": [
+          "10:00-18:00"
+        ]
+      }
+    },
+    {
+      "name": "Mariana Sousa",
+      "title_pt": "Drenagem linfática e pré-natal",
+      "title_en": "Lymphatic drainage and pregnancy",
       "bio_pt": "Especializada no método Vodder e em acompanhamento na gravidez.",
       "bio_en": "Specialises in the Vodder method and care during pregnancy.",
-      "services": ["Massagem de relaxamento", "Massagem de relaxamento longa", "Drenagem linfática manual", "Reflexologia podal", "Massagem pré-natal"],
-      "hours": { "mon": ["10:00-18:00"], "wed": ["10:00-18:00"], "thu": ["10:00-18:00"], "fri": ["10:00-18:00"], "sat": ["10:00-16:00"] } }
+      "services": [
+        "Massagem de relaxamento",
+        "Massagem de relaxamento longa",
+        "Drenagem linfática manual",
+        "Reflexologia podal",
+        "Massagem pré-natal"
+      ],
+      "hours": {
+        "mon": [
+          "10:00-18:00"
+        ],
+        "wed": [
+          "10:00-18:00"
+        ],
+        "thu": [
+          "10:00-18:00"
+        ],
+        "fri": [
+          "10:00-18:00"
+        ],
+        "sat": [
+          "10:00-16:00"
+        ]
+      }
+    }
   ]
 }

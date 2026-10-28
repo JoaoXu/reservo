@@ -2,17 +2,26 @@ import { html, raw, safeUrl, type SafeHtml } from '../lib/html.ts';
 import { t, tb, type Locale } from '../lib/i18n.ts';
 import type { Ctx } from '../http/core.ts';
 import type { Tenant } from '../domain/tenants.ts';
-import { sectionEnabled } from '../domain/sites.ts';
+import { normalizeSite, sectionEnabled } from '../domain/sites.ts';
+import { TEMPLATE_INFO, type Font } from '../domain/design.ts';
 
-export const ASSET_VERSION = '2';
+export const ASSET_VERSION = '3';
 
 const DEFAULT_THEME = { ink: '#1d3a35', paper: '#eef2ee', accent: '#7a4e63', soft: '#dfe7e1' };
+
+/** The font pairing: the theme's choice, else the template's default. */
+export function siteFont(tenant: Tenant): Font {
+  const f = tenant.theme.font;
+  return f === 'serif' || f === 'sans' ? f : TEMPLATE_INFO[normalizeSite(tenant.site).template].font;
+}
 
 /** Theme colours as CSS custom properties; values are validated hex at save time. */
 export function themeStyle(tenant: Tenant, nonce: string): SafeHtml {
   const th = { ...DEFAULT_THEME, ...tenant.theme };
   const hex = (v: string | undefined, d: string) => (v && /^#[0-9a-f]{6}$/i.test(v) ? v : d);
-  return raw(`<style nonce="${nonce}">:root{--ink:${hex(th.ink, DEFAULT_THEME.ink)};--paper:${hex(th.paper, DEFAULT_THEME.paper)};--accent:${hex(th.accent, DEFAULT_THEME.accent)};--soft:${hex(th.soft, DEFAULT_THEME.soft)}}</style>`);
+  // Headings use --serif; the sans pairing points it at the body font.
+  const font = siteFont(tenant) === 'sans' ? ';--serif:var(--sans)' : '';
+  return raw(`<style nonce="${nonce}">:root{--ink:${hex(th.ink, DEFAULT_THEME.ink)};--paper:${hex(th.paper, DEFAULT_THEME.paper)};--accent:${hex(th.accent, DEFAULT_THEME.accent)};--soft:${hex(th.soft, DEFAULT_THEME.soft)}${font}}</style>`);
 }
 
 export function langHref(ctx: Ctx): string {
@@ -52,12 +61,12 @@ export function sitePage(ctx: Ctx, opts: PageOpts): SafeHtml {
 ${opts.description ? html`<meta name="description" content="${opts.description}">` : ''}
 ${opts.noindex ? html`<meta name="robots" content="noindex">` : ''}
 <meta name="theme-color" content="${tenant.theme.paper ?? DEFAULT_THEME.paper}">
-<link rel="preload" href="/static/fonts/newsreader.woff" as="font" type="font/woff" crossorigin>
+${siteFont(tenant) === 'serif' ? html`<link rel="preload" href="/static/fonts/newsreader.woff" as="font" type="font/woff" crossorigin>` : ''}
 <link rel="stylesheet" href="/static/css/site.css?v=${ASSET_VERSION}">
 <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
 ${themeStyle(tenant, ctx.nonce)}
 </head>
-<body class="${opts.bodyClass ?? ''}">
+<body class="${opts.bodyClass ?? ''} tpl-${normalizeSite(tenant.site).template} font-${siteFont(tenant)}">
 <a class="skip" href="#main">${l === 'en' ? 'Skip to content' : 'Saltar para o conteúdo'}</a>
 ${opts.preview ? html`<div class="preview-bar" role="status">${t(l, 'site.preview_banner')} <a href="/admin/site">${t(l, 'site.preview_back')}</a></div>` : ''}
 <header class="topbar">

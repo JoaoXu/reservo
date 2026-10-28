@@ -1,17 +1,20 @@
 // The public website: texts, look and sections are edited as a draft, then
 // previewed, published, or rolled back to an earlier version. Owner only.
-import { html, type SafeHtml } from '../../lib/html.ts';
+import { html, raw, type SafeHtml } from '../../lib/html.ts';
 import { tb } from '../../lib/i18n.ts';
 import { FieldErrors, email as emailField, hexColor, httpUrl, isUuid, phone as phoneField, str, bool } from '../../lib/validate.ts';
 import { HttpError, htmlReply, readBody, redirect, type Ctx, type Reply } from '../../http/core.ts';
 import { SECTION_TYPES, type SectionType, type TenantContent } from '../../domain/tenants.ts';
 import {
-  discardDraft, draftVersion, listVersions, normalizeSite, publishDraft, publishedVersion, restoreVersion, saveDraft, withVersion,
+  LIMITS, discardDraft, draftVersion, listVersions, normalizeSite, publishDraft, publishedVersion, restoreVersion, saveDraft, withVersion,
   type SiteVersion,
 } from '../../domain/sites.ts';
+import { FONTS, FONT_INFO, PALETTES, TEMPLATES, TEMPLATE_INFO, contrastProblems, type Font, type Template } from '../../domain/design.ts';
+import { siteFont } from '../layout.ts';
 import { adminPage, csrfField, fieldError, flashFrom, tr } from './layout.ts';
 
-const TABS = ['texts', 'look', 'sections', 'history'] as const;
+const TABS = ['texts', 'look', 'sections', 'gallery', 'testimonials', 'faq', 'history'] as const;
+const EDITABLE = ['texts', 'look', 'sections', 'gallery', 'testimonials', 'faq'];
 type Tab = (typeof TABS)[number];
 
 function sectionName(type: SectionType, ctx: Ctx): string {
@@ -21,6 +24,9 @@ function sectionName(type: SectionType, ctx: Ctx): string {
     services: [tb('pt', ctx.tenant!.business_type, 'services.title'), tb('en', ctx.tenant!.business_type, 'services.title')],
     about: ['Sobre nós', 'About us'],
     team: ['Equipa', 'Team'],
+    gallery: ['Galeria', 'Gallery'],
+    testimonials: ['Testemunhos', 'Testimonials'],
+    faq: ['Perguntas frequentes', 'FAQ'],
     visit: ['Morada e horário', 'Address and hours'],
   };
   return tr(l, names[type][0], names[type][1]);
@@ -87,14 +93,35 @@ export async function siteAdminPage(ctx: Ctx, errors: Record<string, string> = {
     <button class="btn" type="submit">${tr(l, 'Guardar no rascunho', 'Save to draft')}</button>
     </form>`;
   } else if (tab === 'look') {
-    content = html`<form method="post" action="/admin/site?s=look" class="form">${csrfField(ctx)}
-    <p class="muted">${tr(l, 'As cores aplicam-se ao site e ao painel. Garanta bom contraste entre texto e fundo.', 'Colours apply to the site and dashboard. Keep good contrast between text and background.')}</p>
-    <div class="row">
-      <label>${tr(l, 'Texto e botões', 'Text and buttons')}<input type="color" name="ink" value="${th.ink ?? '#1d3a35'}"></label>
-      <label>${tr(l, 'Fundo', 'Background')}<input type="color" name="paper" value="${th.paper ?? '#eef2ee'}"></label>
-      <label>${tr(l, 'Destaque', 'Highlight')}<input type="color" name="accent" value="${th.accent ?? '#7a4e63'}"></label>
-      <label>${tr(l, 'Superfícies', 'Surfaces')}<input type="color" name="soft" value="${th.soft ?? '#dfe7e1'}"></label>
-    </div>${fieldError(errors, 'colors', l)}
+    const site = normalizeSite(t.site);
+    const font = siteFont(t);
+    // Re-shown after rejected custom colours: keep "custom" selected with what they typed.
+    const palette = values ? 'custom' : th.palette && (th.palette === 'custom' || PALETTES[th.palette]) ? th.palette : 'custom';
+    // Swatch colours go in a nonce'd style block: the CSP forbids style="".
+    const swatches = Object.entries(PALETTES).map(([k, p]) => `.sw-${k} i:nth-child(1){background:${p.ink}}.sw-${k} i:nth-child(2){background:${p.paper}}.sw-${k} i:nth-child(3){background:${p.accent}}.sw-${k} i:nth-child(4){background:${p.soft}}`).join('');
+    const v = (k: 'ink' | 'paper' | 'accent' | 'soft', d: string) => String(values?.[k] ?? th[k] ?? d);
+    content = html`${raw(`<style nonce="${ctx.nonce}">${swatches}</style>`)}<form method="post" action="/admin/site?s=look" class="form">${csrfField(ctx)}
+    <fieldset><legend>${tr(l, 'Modelo', 'Template')}</legend>
+      ${TEMPLATES.map((k) => html`<label class="check choice"><input type="radio" name="template" value="${k}" ${site.template === k ? 'checked' : ''}>
+        <span><strong>${tr(l, TEMPLATE_INFO[k].pt, TEMPLATE_INFO[k].en)}</strong><br><small>${tr(l, TEMPLATE_INFO[k].hint_pt, TEMPLATE_INFO[k].hint_en)}</small></span></label>`)}
+    </fieldset>
+    <fieldset><legend>${tr(l, 'Letra', 'Font')}</legend>
+      ${FONTS.map((k) => html`<label class="check"><input type="radio" name="font" value="${k}" ${font === k ? 'checked' : ''}> ${tr(l, FONT_INFO[k].pt, FONT_INFO[k].en)}</label>`)}
+    </fieldset>
+    <fieldset><legend>${tr(l, 'Cores', 'Colours')}</legend>
+      <div class="palettes">${Object.entries(PALETTES).map(([k, p]) => html`<label class="check choice palette sw-${k}"><input type="radio" name="palette" value="${k}" ${palette === k ? 'checked' : ''}>
+        <span class="swatch" aria-hidden="true"><i></i><i></i><i></i><i></i></span> ${tr(l, p.pt, p.en)}</label>`)}
+        <label class="check choice palette"><input type="radio" name="palette" value="custom" ${palette === 'custom' ? 'checked' : ''}> ${tr(l, 'Personalizadas (abaixo)', 'Custom (below)')}</label>
+      </div>
+      <div class="row">
+        <label>${tr(l, 'Texto e botões', 'Text and buttons')}<input type="color" name="ink" value="${v('ink', '#1d3a35')}"></label>
+        <label>${tr(l, 'Fundo', 'Background')}<input type="color" name="paper" value="${v('paper', '#eef2ee')}"></label>
+        <label>${tr(l, 'Destaque', 'Highlight')}<input type="color" name="accent" value="${v('accent', '#7a4e63')}"></label>
+        <label>${tr(l, 'Superfícies', 'Surfaces')}<input type="color" name="soft" value="${v('soft', '#dfe7e1')}"></label>
+      </div>
+      <small>${tr(l, 'As cores personalizadas só são aceites se o texto se ler bem (contraste de pelo menos 4,5:1).', 'Custom colours are accepted only if text stays readable (contrast of at least 4.5:1).')}</small>
+      ${errors.colors ? html`<span class="field-error" role="alert">${errors.colors}</span>` : ''}
+    </fieldset>
     <label>${tr(l, 'Logótipo (link https, opcional)', 'Logo (https link, optional)')}<input name="logo_url" type="url" value="${th.logo_url ?? ''}">${fieldError(errors, 'logo_url', l)}</label>
     <button class="btn" type="submit">${tr(l, 'Guardar no rascunho', 'Save to draft')}</button>
     </form>`;
@@ -114,6 +141,8 @@ export async function siteAdminPage(ctx: Ctx, errors: Record<string, string> = {
     </table>
     <button class="btn" type="submit">${tr(l, 'Guardar no rascunho', 'Save to draft')}</button>
     </form>`;
+  } else if (tab === 'gallery' || tab === 'testimonials' || tab === 'faq') {
+    content = listEditor(ctx, tab, normalizeSite(t.site));
   } else {
     const versions = await listVersions(ctx.tenant!.id);
     const when = (d: Date) => new Intl.DateTimeFormat(l === 'en' ? 'en-GB' : 'pt-PT', { dateStyle: 'medium', timeStyle: 'short', timeZone: ctx.tenant!.timezone }).format(d);
@@ -130,7 +159,10 @@ export async function siteAdminPage(ctx: Ctx, errors: Record<string, string> = {
     </table>`;
   }
 
-  const names: Record<Tab, [string, string]> = { texts: ['Textos', 'Texts'], look: ['Aspeto', 'Look'], sections: ['Secções', 'Sections'], history: ['Histórico', 'History'] };
+  const names: Record<Tab, [string, string]> = {
+    texts: ['Textos', 'Texts'], look: ['Aspeto', 'Look'], sections: ['Secções', 'Sections'], gallery: ['Galeria', 'Gallery'],
+    testimonials: ['Testemunhos', 'Testimonials'], faq: ['Perguntas', 'FAQ'], history: ['Histórico', 'History'],
+  };
   const body = html`<h1>${tr(l, 'Site', 'Website')}</h1>
   ${draftBar(ctx, draft, published)}
   <nav class="tabs" aria-label="${tr(l, 'Secções', 'Sections')}">${TABS.map((s) => html`<a href="/admin/site?s=${s}" ${s === tab ? html`aria-current="page"` : ''}>${tr(l, names[s][0], names[s][1])}</a>`)}</nav>
@@ -140,7 +172,7 @@ export async function siteAdminPage(ctx: Ctx, errors: Record<string, string> = {
 
 export async function siteSave(ctx: Ctx): Promise<Reply> {
   const tab = ctx.query.get('s') as Tab;
-  if (!['texts', 'look', 'sections'].includes(tab)) throw new HttpError(400, 'Unknown section');
+  if (!EDITABLE.includes(tab)) throw new HttpError(400, 'Unknown section');
   const body = await readBody(ctx);
   const errs = new FieldErrors();
   const by = ctx.session!.name;
@@ -159,15 +191,27 @@ export async function siteSave(ctx: Ctx): Promise<Reply> {
     if (!errs.ok) return siteAdminPage(ctx, errs.errors, body);
     await saveDraft(ctx.tenant!.id, (cur) => ({ ...cur, name, content: { ...cur.content, ...content } }), by);
   } else if (tab === 'look') {
-    const theme = {
-      ink: hexColor(body, 'ink', errs, '#1d3a35'), paper: hexColor(body, 'paper', errs, '#eef2ee'),
-      accent: hexColor(body, 'accent', errs, '#7a4e63'), soft: hexColor(body, 'soft', errs, '#dfe7e1'),
-      logo_url: httpUrl(body, 'logo_url', errs) ?? '',
-    };
+    const template = (TEMPLATES as readonly string[]).includes(String(body.template)) ? (body.template as Template) : 'classic';
+    const font = (FONTS as readonly string[]).includes(String(body.font)) ? (body.font as Font) : TEMPLATE_INFO[template].font;
+    const key = String(body.palette ?? 'custom');
+    const preset = PALETTES[key];
+    const colours = preset
+      ? { ink: preset.ink, paper: preset.paper, accent: preset.accent, soft: preset.soft }
+      : { ink: hexColor(body, 'ink', errs, '#1d3a35'), paper: hexColor(body, 'paper', errs, '#eef2ee'), accent: hexColor(body, 'accent', errs, '#7a4e63'), soft: hexColor(body, 'soft', errs, '#dfe7e1') };
+    const logo_url = httpUrl(body, 'logo_url', errs) ?? '';
     if (!errs.ok) return siteAdminPage(ctx, errs.errors);
-    await saveDraft(ctx.tenant!.id, (cur) => ({ ...cur, theme: { ...cur.theme, ...theme } }), by);
+    const bad = contrastProblems(colours);
+    if (bad.length) {
+      const l = ctx.locale;
+      const msg = bad.map(({ rule, ratio }) => `${tr(l, rule.pt, rule.en)} ${ratio.toFixed(1).replace('.', l === 'pt' ? ',' : '.')}:1`).join('; ');
+      return siteAdminPage(ctx, { colors: tr(l, `Estas cores não se leem bem: ${msg}. O mínimo é 4,5:1.`, `These colours aren’t readable enough: ${msg}. The minimum is 4.5:1.`) }, colours);
+    }
+    await saveDraft(ctx.tenant!.id, (cur) => ({ ...cur, theme: { ...cur.theme, ...colours, palette: preset ? key : 'custom', font, logo_url }, site: { ...cur.site, template } }), by);
+  } else if (tab === 'gallery' || tab === 'testimonials' || tab === 'faq') {
+    const rows = readRows(body, tab);
+    await saveDraft(ctx.tenant!.id, (cur) => ({ ...cur, site: { ...cur.site, [tab]: rows } }), by);
   } else {
-    // Sort by the typed order; ties keep the current order.
+    // Sections: sort by the typed order; ties keep the current order.
     const current = normalizeSite((await draftVersion(ctx.tenant!.id))?.site ?? ctx.tenant!.site).sections;
     const sections = current
       .map((s, i) => ({ type: s.type, enabled: s.type === 'services' || bool(body, `show_${s.type}`), order: Number(body[`order_${s.type}`]) || i + 1, i }))
@@ -194,4 +238,45 @@ export async function siteRestore(ctx: Ctx): Promise<Reply> {
   const v = await restoreVersion(ctx.tenant!.id, id, ctx.session!.userId, ctx.session!.name);
   if (!v) throw new HttpError(404, 'Not found');
   return redirect('/admin/site?s=history&ok=restored');
+}
+
+// --- List editors (gallery, testimonials, FAQ) ----------------------------------
+// Plain forms with numbered rows: existing items plus empty rows up to the
+// limit. Clearing a row removes it; normalizeSite drops incomplete rows.
+
+const LIST_FIELDS = {
+  gallery: [['url', 'Link da imagem (https)', 'Image link (https)', 500], ['alt_pt', 'Descrição (português)', 'Description (Portuguese)', 140], ['alt_en', 'Descrição (inglês)', 'Description (English)', 140]],
+  testimonials: [['quote_pt', 'Testemunho (português)', 'Quote (Portuguese)', 400], ['quote_en', 'Testemunho (inglês)', 'Quote (English)', 400], ['author', 'Nome', 'Name', 60]],
+  faq: [['q_pt', 'Pergunta (português)', 'Question (Portuguese)', 160], ['a_pt', 'Resposta (português)', 'Answer (Portuguese)', 800], ['q_en', 'Pergunta (inglês)', 'Question (English)', 160], ['a_en', 'Resposta (inglês)', 'Answer (English)', 800]],
+} as const;
+type ListTab = keyof typeof LIST_FIELDS;
+
+function listEditor(ctx: Ctx, tab: ListTab, site: ReturnType<typeof normalizeSite>): SafeHtml {
+  const l = ctx.locale;
+  const items = site[tab] as unknown as Record<string, string>[];
+  const count = Math.min(LIMITS[tab], items.length + 2);
+  const hint: Record<ListTab, [string, string]> = {
+    gallery: ['Fotografias do espaço e do trabalho. Por agora, links https para imagens já publicadas (por exemplo no vosso site ou Instagram); o envio de fotos chega em breve.', 'Photos of the space and the work. For now, https links to images already online; photo uploads are coming soon.'],
+    testimonials: ['Frases de clientes reais, com autorização. Curtas funcionam melhor.', 'Quotes from real clients, with their permission. Short ones work best.'],
+    faq: ['Respostas às perguntas que mais vos fazem (estacionamento, o que trazer, gravidez, cartões de oferta...).', 'Answers to what people ask most (parking, what to bring, pregnancy, gift cards...).'],
+  };
+  const big = (f: string) => f.startsWith('quote') || f.startsWith('a_');
+  return html`<form method="post" action="/admin/site?s=${tab}" class="form">${csrfField(ctx)}
+    <p class="muted">${tr(l, hint[tab][0], hint[tab][1])} ${tr(l, `Até ${LIMITS[tab]}. Para remover, apague os campos.`, `Up to ${LIMITS[tab]}. To remove one, clear its fields.`)}</p>
+    ${Array.from({ length: count }, (_, i) => html`<fieldset><legend>${i + 1}</legend>
+      ${LIST_FIELDS[tab].map(([f, pt, en, max]) => html`<label>${tr(l, pt, en)}${big(f)
+        ? html`<textarea name="${f}_${i}" rows="2" maxlength="${max}">${items[i]?.[f] ?? ''}</textarea>`
+        : html`<input name="${f}_${i}" value="${items[i]?.[f] ?? ''}" maxlength="${max}" ${f === 'url' ? html`type="url"` : ''}>`}</label>`)}
+    </fieldset>`)}
+    <button class="btn" type="submit">${tr(l, 'Guardar no rascunho', 'Save to draft')}</button>
+  </form>`;
+}
+
+function readRows(body: Record<string, unknown>, tab: ListTab): Record<string, string>[] {
+  const rows: Record<string, string>[] = [];
+  for (let i = 0; i < LIMITS[tab]; i++) {
+    const row = Object.fromEntries(LIST_FIELDS[tab].map(([f]) => [f, typeof body[`${f}_${i}`] === 'string' ? (body[`${f}_${i}`] as string) : '']));
+    if (Object.values(row).some((v) => v.trim())) rows.push(row);
+  }
+  return rows; // normalizeSite trims, validates links and drops incomplete rows
 }

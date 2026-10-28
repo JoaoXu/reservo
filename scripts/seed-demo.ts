@@ -1,8 +1,9 @@
-// Creates (or recreates) the demo business "Maré" from clients/mare.json,
-// used to show the product to owners. Maré is fictional: payments are
-// simulated and no messages are sent.
+// Creates (or recreates) the demo businesses from their client files: every
+// clients/*.json with "status": "demo" (Maré, the massage studio, and
+// Navalha, the barbershop). They are fictional: payments are simulated and
+// no messages are sent. Extra domains (e.g. "localhost") go to Maré.
 //   npm run seed:demo -- [extra-domain...] [--with-bookings]
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { sql, closeDb } from '../src/db.ts';
 import { isMain } from '../src/lib/main.ts';
@@ -15,14 +16,30 @@ export const DEMO = {
   password: process.env.DEMO_PASSWORD || 'mare-demo-2026',
 };
 
-export const DEMO_FILE = join(import.meta.dirname, '..', 'clients', 'mare.json');
+const CLIENTS_DIR = join(import.meta.dirname, '..', 'clients');
+export const DEMO_FILE = join(CLIENTS_DIR, 'mare.json');
 
-/** Wipes Maré (bookings included) and sets it up again from its client file. */
+/** Wipes a demo business (bookings included) and sets it up again from its file. */
+export async function seedDemoFile(file: string, extraDomains: string[] = [], ownerPassword?: string): Promise<{ id: string; slug: string; name: string; email: string; password: string | null }> {
+  const spec = parseClientSpec(JSON.parse(await readFile(file, 'utf8')));
+  if (spec.status !== 'demo') throw new Error(`${file} is not a demo business`);
+  await sql`delete from tenants where slug = ${spec.slug}`;
+  const r = await applyClient(spec, { extraDomains, ownerPassword });
+  return { id: r.tenantId, slug: spec.slug, name: spec.name, email: spec.owner.email, password: ownerPassword ?? spec.owner.password };
+}
+
+/** Maré, the demo the tests and the docs use. */
 export async function seedDemo(extraDomains: string[] = []): Promise<string> {
-  const spec = parseClientSpec(JSON.parse(await readFile(DEMO_FILE, 'utf8')));
-  await sql`delete from tenants where slug = ${DEMO.slug}`;
-  const r = await applyClient(spec, { extraDomains, ownerPassword: DEMO.password });
-  return r.tenantId;
+  return (await seedDemoFile(DEMO_FILE, extraDomains, DEMO.password)).id;
+}
+
+export async function demoFiles(): Promise<string[]> {
+  const files: string[] = [];
+  for (const f of (await readdir(CLIENTS_DIR)).filter((n) => n.endsWith('.json')).sort()) {
+    const raw = JSON.parse(await readFile(join(CLIENTS_DIR, f), 'utf8')) as { status?: string };
+    if (raw.status === 'demo') files.push(join(CLIENTS_DIR, f));
+  }
+  return files;
 }
 
 /** A few realistic bookings for tomorrow and the day after, so the agenda isn't empty in a demo. */
@@ -63,10 +80,13 @@ export async function seedDemoBookings(tenantId: string): Promise<number> {
 if (isMain(import.meta.url)) {
   try {
     const extra = process.argv.slice(2).filter((a) => !a.startsWith('--'));
-    const id = await seedDemo(extra);
-    if (process.argv.includes('--with-bookings')) console.log(`Sample bookings: ${await seedDemoBookings(id)}`);
-    console.log(`Demo studio ready at http://${DEMO.slug}.${config.platformDomain}:${config.port}`);
-    console.log(`Dashboard: /admin  login ${DEMO.email} / ${DEMO.password}`);
+    const local = config.platformDomain === 'localhost';
+    for (const file of await demoFiles()) {
+      const isMare = file === DEMO_FILE;
+      const d = await seedDemoFile(file, isMare ? extra : [], isMare ? DEMO.password : undefined);
+      console.log(`${d.name}: ${local ? 'http' : 'https'}://${d.slug}.${config.platformDomain}${local ? `:${config.port}` : ''}/  dashboard /admin  login ${d.email} / ${d.password}`);
+      if (process.argv.includes('--with-bookings')) console.log(`  sample bookings: ${await seedDemoBookings(d.id)}`);
+    }
   } finally {
     await closeDb();
   }

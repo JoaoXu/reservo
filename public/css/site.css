@@ -352,3 +352,73 @@ p { margin: 0 0 1em; }
 /* Draft preview, shown only to the signed-in owner */
 .preview-bar { position: sticky; top: 0; z-index: 20; background: var(--accent); color: var(--paper); text-align: center; padding: 8px 16px; font-size: 0.9rem; }
 .preview-bar a { color: inherit; font-weight: 600; margin-left: 8px; }
+
+/* Gallery */
+.gallery-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.gallery-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--r-field); background: var(--soft); }
+
+/* Testimonials */
+.quote-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px 44px; }
+.quote-list figure { margin: 0; }
+.quote-list blockquote { margin: 0; font: 300 1.25rem/1.45 var(--serif); }
+.quote-list blockquote p { margin: 0; }
+.quote-list blockquote p::before { content: "“"; }
+.quote-list blockquote p::after { content: "”"; }
+.quote-list figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9375rem; }
+.quote-list figcaption::before { content: "— "; }
+
+/* FAQ: native <details>, no script */
+.faq-item { border-top: 1px solid var(--line); max-width: 760px; }
+.faq-item:last-of-type { border-bottom: 1px solid var(--line); }
+.faq-item summary { cursor: pointer; list-style: none; position: relative; padding: 16px 36px 16px 0; font: 400 1.25rem/1.3 var(--serif); }
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after { content: "+"; position: absolute; right: 6px; top: 13px; font: 300 1.6rem/1 var(--sans); color: var(--accent); }
+.faq-item[open] summary::after { content: "–"; }
+.faq-item p { color: var(--ink-2); max-width: 62ch; }
+.faq-item > p:last-child { padding-bottom: 8px; }
+
+/* Sans font pairing: headings in Figtree need more weight than the serif */
+.font-sans h1, .font-sans h2, .font-sans h3, .font-sans .hero-title, .font-sans .section-title { font-weight: 600; letter-spacing: -0.02em; }
+.font-sans .about, .font-sans .quote-list blockquote { font-weight: 400; }
+
+/* --- Template: Studio ------------------------------------------------------------
+   Same markup as Classic. Dark bands behind header and hero (paper text on
+   ink, which the contrast rules guarantee), square corners, uppercase sans
+   headings, services as cards. The accent is never used as text on ink. */
+.tpl-studio { --r-panel: 6px; --r-field: 4px; }
+.tpl-studio .btn, .tpl-studio .menu-book { border-radius: 4px; }
+.tpl-studio .topbar, .tpl-studio .hero {
+  background: var(--ink); color: var(--paper);
+  box-shadow: 0 0 0 100vmax var(--ink); clip-path: inset(0 -100vmax);
+}
+.tpl-studio .topbar :focus-visible, .tpl-studio .hero :focus-visible { outline-color: var(--paper); }
+.tpl-studio .wordmark { font: 800 1.3rem/1 var(--sans); text-transform: uppercase; letter-spacing: 0.08em; }
+.tpl-studio .topnav a { color: color-mix(in oklab, var(--paper) 80%, var(--ink)); }
+.tpl-studio .topnav a:hover { color: var(--paper); }
+.tpl-studio .topbar .btn, .tpl-studio .hero .btn { background: var(--accent); border-color: var(--accent); color: var(--paper); }
+.tpl-studio .topbar .btn:hover, .tpl-studio .hero .btn:hover { background: color-mix(in oklab, var(--accent) 85%, black); }
+.tpl-studio .hero .btn-quiet { background: transparent; border-color: color-mix(in oklab, var(--paper) 55%, var(--ink)); color: var(--paper); }
+.tpl-studio .hero .btn-quiet:hover { background: color-mix(in oklab, var(--paper) 12%, var(--ink)); }
+.tpl-studio .hero-title { font-family: var(--sans); font-weight: 800; text-transform: uppercase; letter-spacing: -0.01em; line-height: 0.95; max-width: 14ch; }
+.tpl-studio .hero-intro { color: color-mix(in oklab, var(--paper) 85%, var(--ink)); }
+.tpl-studio .tide { display: none; }
+.tpl-studio .openings { background: color-mix(in oklab, var(--paper) 8%, var(--ink)); border-color: color-mix(in oklab, var(--paper) 20%, var(--ink)); }
+.tpl-studio .openings-service, .tpl-studio .openings-day { color: color-mix(in oklab, var(--paper) 78%, var(--ink)); }
+.tpl-studio .openings-list a { border-top-color: color-mix(in oklab, var(--paper) 20%, var(--ink)); }
+.tpl-studio .openings-list a:hover .openings-time { color: var(--paper); text-decoration: underline; }
+.tpl-studio .openings-time { font-family: var(--sans); font-weight: 700; }
+.tpl-studio .section-title { font-family: var(--sans); font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+.tpl-studio #tratamentos { background: var(--paper); }
+.tpl-studio .menu { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.tpl-studio .menu-item { grid-template-columns: 1fr; border: 1px solid var(--line); border-radius: var(--r-panel); padding: 18px; background: var(--raised); }
+.tpl-studio .menu-item h3 { font-family: var(--sans); font-weight: 700; font-size: 1.15rem; }
+.tpl-studio .menu-meta { justify-content: flex-start; }
+.tpl-studio .menu-book { margin-left: auto; }
+.tpl-studio .menu-price, .tpl-studio .visit-address { font-family: var(--sans); font-weight: 700; }
+.tpl-studio .menu-category { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8125rem; }
+.tpl-studio .about { font: 400 clamp(1.15rem, 2vw, 1.35rem)/1.6 var(--sans); }
+.tpl-studio .person-photo { border-radius: var(--r-panel); }
+.tpl-studio .person-mono { font: 700 1.3rem/1 var(--sans); }
+.tpl-studio .quote-list blockquote { font: 500 1.125rem/1.5 var(--sans); border-left: 3px solid var(--accent); padding-left: 16px; }
+.tpl-studio .faq-item summary { font: 600 1.125rem/1.3 var(--sans); }
+.tpl-studio .footer-name { font: 800 1.2rem/1.1 var(--sans); text-transform: uppercase; letter-spacing: 0.08em; }

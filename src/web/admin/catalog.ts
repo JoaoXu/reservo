@@ -52,7 +52,10 @@ export async function serviceForm(ctx: Ctx, errors: Record<string, string> = {},
   </div>
   <label>${tr(l, 'Descrição (português)', 'Description (Portuguese)')}<textarea name="description_pt" rows="2" maxlength="400">${p('description_pt', s.description_pt)}</textarea></label>
   <label>${tr(l, 'Descrição (inglês)', 'Description (English)')}<textarea name="description_en" rows="2" maxlength="400">${p('description_en', s.description_en)}</textarea></label>
-  <label>${tr(l, 'Categoria (agrupa no site)', 'Category (groups them on the site)')}<input name="category" value="${p('category', s.category)}" maxlength="40"></label>
+  <div class="row">
+    <label>${tr(l, 'Categoria (agrupa no site)', 'Category (groups them on the site)')}<input name="category" value="${p('category', s.category)}" maxlength="40"></label>
+    <label>${tr(l, 'Categoria (inglês)', 'Category (English)')}<input name="category_en" value="${p('category_en', s.category_en)}" maxlength="40"></label>
+  </div>
   <div class="row">
     <label>${tr(l, 'Duração (min)', 'Length (min)')}<input name="duration_min" type="number" min="5" max="600" step="5" value="${p('duration_min', s.duration_min)}" required>${fieldError(errors, 'duration_min', l)}</label>
     <label>${tr(l, 'Intervalo depois (min)', 'Break after (min)')}<input name="buffer_min" type="number" min="0" max="120" step="5" value="${p('buffer_min', s.buffer_min)}">${fieldError(errors, 'buffer_min', l)}</label>
@@ -79,6 +82,7 @@ export async function serviceSave(ctx: Ctx): Promise<Reply> {
     description_pt: str(body, 'description_pt', errs, { max: 400, required: false }),
     description_en: str(body, 'description_en', errs, { max: 400, required: false }),
     category: str(body, 'category', errs, { max: 40, required: false }),
+    category_en: str(body, 'category_en', errs, { max: 40, required: false }),
     duration_min: int(body, 'duration_min', errs, { min: 5, max: 600 }),
     buffer_min: int(body, 'buffer_min', errs, { min: 0, max: 120, required: false }),
     price_cents: euros(body, 'price', errs),

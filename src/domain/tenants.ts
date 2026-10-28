@@ -2,6 +2,7 @@ import { sql, type Tx } from '../db.ts';
 import { config } from '../config.ts';
 import { decryptJson, encryptJson } from '../lib/crypto.ts';
 import type { IfthenpayKeys } from './payments/ifthenpay.ts';
+import type { Font, Template } from './design.ts';
 
 export interface TenantContent {
   tagline_pt?: string; tagline_en?: string;
@@ -22,18 +23,29 @@ export interface TenantTheme {
   soft?: string; // secondary surfaces
   logo_url?: string;
   hero_image_url?: string;
+  /** Preset key from design.ts PALETTES, or 'custom'. */
+  palette?: string;
+  font?: Font;
 }
 
 export const BUSINESS_TYPES = ['massage', 'salon', 'barber', 'beauty'] as const;
 export type BusinessType = (typeof BUSINESS_TYPES)[number];
 
-export const SECTION_TYPES = ['hero', 'services', 'about', 'team', 'visit'] as const;
+// Default order; sections added later slot in at their position here.
+export const SECTION_TYPES = ['hero', 'services', 'about', 'team', 'gallery', 'testimonials', 'faq', 'visit'] as const;
 export type SectionType = (typeof SECTION_TYPES)[number];
 
-/** Layout of the public site: template and the order/visibility of its sections. */
+export interface GalleryItem { url: string; alt_pt: string; alt_en: string }
+export interface Testimonial { quote_pt: string; quote_en: string; author: string }
+export interface FaqItem { q_pt: string; q_en: string; a_pt: string; a_en: string }
+
+/** Layout and section content of the public site. */
 export interface SiteConfig {
-  template: 'classic';
+  template: Template;
   sections: { type: SectionType; enabled: boolean }[];
+  gallery: GalleryItem[];
+  testimonials: Testimonial[];
+  faq: FaqItem[];
 }
 
 export interface Tenant {

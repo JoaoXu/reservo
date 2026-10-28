@@ -9,7 +9,7 @@ import { amountDue, availableMethods, holdMinutesFor, startPayment, PaymentStart
 import { tenantBaseUrl, type Tenant } from './tenants.ts';
 
 export interface Service {
-  id: string; category: string; name_pt: string; name_en: string; description_pt: string; description_en: string;
+  id: string; category: string; category_en: string; name_pt: string; name_en: string; description_pt: string; description_en: string;
   duration_min: number; buffer_min: number; price_cents: number; active: boolean; sort: number;
 }
 export interface Staff {

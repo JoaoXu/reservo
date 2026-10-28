@@ -35,7 +35,7 @@ export async function bookingPage(ctx: Ctx): Promise<Reply> {
     cancelHours: tenant.cancel_window_hours,
     whatsapp: whatsappLink(tenant.content.whatsapp),
     services: services.map((s) => ({
-      id: s.id, name: lget(s, 'name', l), description: lget(s, 'description', l), category: s.category,
+      id: s.id, name: lget(s, 'name', l), description: lget(s, 'description', l), category: (l === 'en' && s.category_en) || s.category,
       duration: s.duration_min, price: s.price_cents, priceLabel: formatMoney(s.price_cents, l),
       due: amountDue(tenant, s.price_cents), dueLabel: formatMoney(amountDue(tenant, s.price_cents), l),
       staff: map[s.id] ?? [],
