@@ -59,6 +59,10 @@ TypeScript directly: there is no build step.
 - Schema changes: add a new `migrations/00N_*.sql`; never edit an applied one.
   Keep migrations additive so old and new app versions can run together.
 - Run `npm test` and `npm run typecheck` before calling anything done.
+  Integration tests hit a real Postgres and real HTTP (`call()` helper in
+  `test/integration.test.ts`), store media in a temp folder, and build test
+  images with `test/helpers/images.ts`. New tenant-scoped features get a
+  cross-tenant isolation test.
 - **Public site content is versioned** (`src/domain/sites.ts`): edits go to a
   draft in `site_versions`; publishing copies name/content/theme/site into
   `tenants`, which always holds the published version (everything else reads
@@ -82,22 +86,31 @@ TypeScript directly: there is no build step.
   preset palettes. Every palette, preset or custom, must pass the contrast
   rules (4.5:1); Studio CSS never puts accent-coloured text on ink.
 
-Map: `src/domain/` (bookings, availability, payments/ifthenpay, notify, jobs, sites, provision),
-`src/web/` (site, booking flow, hooks, admin), `src/http/` (router, sessions,
-rate limits), `docs/` (ARCHITECTURE, DEPLOY, ONBOARDING).
+Map: `src/domain/` (bookings, availability, payments/ifthenpay, notify, jobs,
+sites, design, media, provision), `src/lib/` (i18n, images, sigv4, time,
+crypto), `src/web/` (site, booking flow, hooks, admin), `src/http/` (router,
+sessions, rate limits, CSP), `clients/` (one JSON file per business + photos),
+`docs/` (ARCHITECTURE, DEPLOY, ONBOARDING, **PROJECT_STATUS**, **NEXT_STEPS**).
 
-## Current status (27 Oct 2026)
+Start a session by reading `docs/PROJECT_STATUS.md` (what is built, deployed
+and known broken) and `docs/NEXT_STEPS.md` (prioritised work). Keep both
+current when a phase ships.
+
+## Current status (28 Oct 2026)
 
 Done and tested locally: template, booking engine (DB exclusion constraint
 prevents double bookings), ifthenpay MB WAY/Multibanco/card client and
 webhooks, mock gateway for demos, owner dashboard, reminders job, RGPD
 export/erasure, Dockerfile, docker-compose, CI workflow, GCP Terraform
-(`deploy/gcp/`), static demo export (`npm run demo:export`).
+(`deploy/gcp/`, not kept in step since the AWS move: no media storage),
+static demo export (`npm run demo:export`). 40 tests, typecheck clean.
 
-**Deployed on AWS** (20 Oct 2026): `deploy/aws/`, image `d2e0252`. HTTPS on
-the test domain since 27 Oct: demo studio https://mare.reservo.joaoxu.dev,
-platform host https://app.reservo.joaoxu.dev. `joaoxu.dev` is the founder's
-personal domain (registrar Namecheap, DNS in Route 53), used only for testing
+**Deployed on AWS** since 20 Oct 2026 (`deploy/aws/`). Platform phases 1–3
+are live: image `ed76c0d`, ECS task definition `reservo:5`, migrations up to
+`004`. Test domain: platform host https://app.reservo.joaoxu.dev, demos
+https://mare.reservo.joaoxu.dev and https://navalha.reservo.joaoxu.dev, images
+from https://media.reservo.joaoxu.dev. `joaoxu.dev` is the founder's personal
+domain (registrar Namecheap, DNS delegated to Route 53), used only for testing
 until the product name and domain are decided.
 
 Not yet done / not verified:
@@ -136,6 +149,19 @@ estimate ~$56 plus $0.50 for the Route 53 zone.
   CLI v2 as `/opt/homebrew/bin/aws`: a pyenv CLI v1 shim shadows it.
 - Operating it: `deploy/aws/README.md` and the `Makefile` (`release`, `migrate`,
   `seed`, `smoke`).
+- Release order (what `make release` does; keep it when running by hand):
+  commit → build and push the image tagged with the short SHA → plan and get
+  the founder's OK → targeted apply of `aws_ecs_task_definition.migrate` →
+  `./run-task.sh` (migrations) → re-plan, check it matches what was approved,
+  full apply → `aws ecs wait services-stable` → `make seed
+  SEED_ARGS=--with-bookings` if demo data changed → smoke test.
+- Media (`media.tf`): bucket `reservo-media-847047140632`, CloudFront
+  `E1HIVNIBAF98IP` with a us-east-1 certificate (provider alias `us_east_1`),
+  task role `reservo-ecs-task` may only put/delete `t/*`. The app gets
+  credentials from the ECS container endpoint; there are no keys anywhere.
+- Local-only files that matter (git-ignored, not backed up by the repo):
+  `deploy/aws/terraform.tfvars`, `deploy/aws/bootstrap/terraform.tfstate`
+  (state of the state bucket), `.env`.
 
 ## Platform roadmap (agreed 27 Oct 2026)
 
@@ -155,8 +181,8 @@ platform subdomain kept as preview/fallback; S3 access signed by hand with
 2. **Done (28 Oct):** Classic and Studio templates (CSS over shared
    sections), gallery/testimonials/FAQ sections and editors, six palettes plus
    custom colours with a WCAG contrast check, two font pairings, English
-   service categories, the Navalha barbershop demo. Gallery takes https links
-   until uploads exist.
+   service categories, the Navalha barbershop demo. (The interim gallery
+   https links were replaced by the photo library in phase 3.)
 3. **Done (28 Oct):** photo library (`media` table, Fotos page, uploads resized
    and GPS-stripped in the browser, re-checked and stripped on the server),
    logo, cover photo, gallery and team photos from the library, client files
